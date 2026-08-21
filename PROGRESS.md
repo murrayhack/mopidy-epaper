@@ -81,8 +81,8 @@ from apt, real Waveshare 2.13" V4 panel.
       tagged file. A first test file that turned up truncated had artist
       and title both in the title tag and no artist tag — `_truncate()`
       behaving correctly on bad metadata, not a layout bug.
-- [ ] Anti-ghosting full refresh at `full_refresh_every` (~5 min of
-      playback) — not yet observed.
+- [x] Anti-ghosting full refresh at `full_refresh_every` fires as
+      expected after ~5 minutes of continuous playback.
 
 Install note: Mopidy from apt lives in system Python, so the extension
 must too (`sudo pip install --break-system-packages --no-deps -e .` with
@@ -111,10 +111,12 @@ under Homebrew Python 3.14 failed at the `ensurepip` step.)
 
 ## Next steps
 
-1. Leave a track playing for ~5 minutes to watch the anti-ghosting full
-   refresh fire, and judge whether `full_refresh_every = 60` is the right
-   cadence — too rare and ghosting builds up, too often and it flashes
-   for no reason. This is the last unexercised path.
+Every code path is now exercised on hardware.
+
+1. Tune `full_refresh_every` once there is more listening time behind it:
+   too rare and ghosting builds up, too often and the panel flashes for
+   no reason. Currently 60 partials, i.e. ~5 minutes at the default
+   5-second interval.
 2. Decide whether badly tagged files deserve special handling, e.g.
    splitting a `"Artist - Title"` title tag when no artist tag exists, or
    dropping the album line to give the title two lines.
