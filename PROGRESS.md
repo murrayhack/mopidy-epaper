@@ -76,7 +76,11 @@ from apt, real Waveshare 2.13" V4 panel.
       **no panel flash**, which was the main design risk.
 - [x] Clean shutdown. The ~4s pause on "Stopping Mopidy frontends" is
       `close()` plus the driver's own 2s pre-sleep delay, not a hang.
-- [ ] Track-change full refresh — untested, only one file in the library.
+- [x] Track-change full refresh works.
+- [x] Title / artist / album lines render as intended on a properly
+      tagged file. A first test file that turned up truncated had artist
+      and title both in the title tag and no artist tag — `_truncate()`
+      behaving correctly on bad metadata, not a layout bug.
 - [ ] Anti-ghosting full refresh at `full_refresh_every` (~5 min of
       playback) — not yet observed.
 
@@ -107,11 +111,10 @@ under Homebrew Python 3.14 failed at the `ensurepip` step.)
 
 ## Next steps
 
-1. Add a second track and confirm a track change triggers exactly one
-   full refresh.
-2. Leave a track playing for ~5 minutes to watch the anti-ghosting full
+1. Leave a track playing for ~5 minutes to watch the anti-ghosting full
    refresh fire, and judge whether `full_refresh_every = 60` is the right
    cadence — too rare and ghosting builds up, too often and it flashes
-   for no reason.
-3. Check how a genuinely long title/artist renders, and whether the
-   album line is worth keeping at this panel size.
+   for no reason. This is the last unexercised path.
+2. Decide whether badly tagged files deserve special handling, e.g.
+   splitting a `"Artist - Title"` title tag when no artist tag exists, or
+   dropping the album line to give the title two lines.
