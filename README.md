@@ -11,6 +11,12 @@ the progress bar ticks along via partial refreshes of the bottom strip. A full
 refresh is forced every `full_refresh_every` partials to clear the ghosting
 that partial updates accumulate.
 
+> **Written with [Claude Code](https://claude.com/claude-code).** The research,
+> design, implementation and documentation in this repository were produced
+> with Anthropic's CLI for Claude. Every code path has since been exercised on
+> real hardware — see [PROGRESS.md](PROGRESS.md) for what was verified and what
+> is still an untuned guess.
+
 ## Hardware
 
 - Raspberry Pi (developed against a Pi Zero)
@@ -97,6 +103,7 @@ only.
 
 ## Credits
 
+- Written with [Claude Code](https://claude.com/claude-code).
 - Panel driver by [Waveshare](https://github.com/waveshareteam/e-Paper).
 - [ePiPod](https://github.com/delhatch/PiPod_ePaper)
   ([writeup](https://hackaday.io/project/196631-epipod)) — a standalone Pi Zero
