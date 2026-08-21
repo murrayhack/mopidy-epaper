@@ -62,6 +62,11 @@ def _find_font(candidates, size):
         return ImageFont.load_default()
 
 
+def blank():
+    """An empty panel-sized image."""
+    return Image.new("1", (WIDTH, HEIGHT), WHITE)
+
+
 def _format_ms(milliseconds):
     """Format a duration as ``m:ss`` (or ``h:mm:ss`` past an hour)."""
     if milliseconds is None:
@@ -99,7 +104,7 @@ def _state_name(state):
     return getattr(state, "value", state)
 
 
-def render(track, state, position_ms, volume, elapsed_only=False, base=None):
+def render(track, state, position_ms, volume, elapsed_only=False, base=None, locked=False):
     """Render the now-playing screen.
 
     With ``elapsed_only`` the status strip is redrawn onto ``base`` in place and
@@ -112,14 +117,16 @@ def render(track, state, position_ms, volume, elapsed_only=False, base=None):
         _draw_status(draw, track, state, position_ms, volume)
         return base
 
-    image = Image.new("1", (WIDTH, HEIGHT), WHITE)
+    image = blank()
     draw = ImageDraw.Draw(image)
-    _draw_track(draw, track)
+    _draw_track(draw, track, reserve_right=locked)
+    if locked:
+        _draw_lock_glyph(draw, WIDTH - MARGIN - 11, 8)
     _draw_status(draw, track, state, position_ms, volume)
     return image
 
 
-def _draw_track(draw, track):
+def _draw_track(draw, track, reserve_right=False):
     if track is None:
         font = _load_font(bold=True, size=18)
         text = "Nothing playing"
@@ -128,10 +135,14 @@ def _draw_track(draw, track):
         return
 
     usable = WIDTH - 2 * MARGIN
+    # Keep the title clear of the padlock rather than letting them overlap.
+    title_usable = usable - 18 if reserve_right else usable
 
     title_font = _load_font(bold=True, size=19)
     title = getattr(track, "name", None) or "Unknown track"
-    draw.text((MARGIN, 8), _truncate(draw, title, title_font, usable), font=title_font, fill=BLACK)
+    draw.text(
+        (MARGIN, 8), _truncate(draw, title, title_font, title_usable), font=title_font, fill=BLACK
+    )
 
     artist_font = _load_font(bold=False, size=15)
     artist = _artist_names(track) or "Unknown artist"
@@ -192,3 +203,16 @@ def _draw_state_glyph(draw, x, y, state, size=9):
         draw.rectangle((x + size - bar, y, x + size, y + size), fill=BLACK)
     else:
         draw.rectangle((x, y, x + size, y + size), fill=BLACK)
+
+
+def _draw_lock_glyph(draw, x, y, width=11, height=15):
+    """A padlock, drawn as primitives for the same reason as the state glyph."""
+    body_top = y + height // 2
+    draw.rectangle((x, body_top, x + width, y + height), fill=BLACK)
+    shackle_inset = 2
+    draw.arc(
+        (x + shackle_inset, y, x + width - shackle_inset, body_top + 3),
+        start=180,
+        end=360,
+        fill=BLACK,
+    )

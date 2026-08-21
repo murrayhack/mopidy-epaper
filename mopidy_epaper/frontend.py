@@ -1,4 +1,8 @@
-"""Mopidy frontend actor driving the e-paper display."""
+"""Mopidy frontend actor driving the e-paper display.
+
+Mopidy glue only: it turns playback events and a periodic tick into calls on
+:class:`~mopidy_epaper.ui.Ui`, which owns all the screen state.
+"""
 
 import logging
 import threading
@@ -8,6 +12,7 @@ import pykka
 from mopidy import core
 
 from .display import EpaperDisplay
+from .ui import Ui
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +23,7 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
         self.config = config["epaper"]
         self.core = core
         self.display = None
+        self.ui = None
         self._stop_event = threading.Event()
         self._ticker = None
 
@@ -30,6 +36,7 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
             self.stop()
             return
 
+        self.ui = Ui(self.config, self.display)
         self._refresh()
         self._ticker = threading.Thread(
             target=self._tick_loop, name="EpaperTicker", daemon=True
@@ -44,17 +51,20 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
             self.display.close()
 
     def _tick_loop(self):
-        """Refresh the progress bar periodically while playing."""
+        """Tick regardless of playback state.
+
+        The UI needs a heartbeat even while stopped, otherwise nothing drives
+        the idle-sleep timer. It skips redundant redraws itself.
+        """
         interval = self.config["update_interval"]
         while not self._stop_event.wait(interval):
             try:
-                if self.core.playback.get_state().get() == core.PlaybackState.PLAYING:
-                    self._refresh()
+                self._refresh()
             except Exception:
                 logger.exception("e-paper tick failed")
 
     def _refresh(self):
-        if self.display is None:
+        if self.ui is None:
             return
 
         try:
@@ -69,9 +79,23 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
             return
 
         try:
-            self.display.update(track, state, position, volume)
+            self.ui.render_playback(track, state, position, volume)
         except Exception:
             logger.exception("Could not update the e-paper display")
+
+    def lock(self):
+        if self.ui is not None:
+            self.ui.lock()
+
+    def unlock(self):
+        if self.ui is not None:
+            self.ui.unlock()
+            self._refresh()
+
+    def wake(self):
+        if self.ui is not None:
+            self.ui.wake()
+            self._refresh()
 
     def track_playback_started(self, tl_track):
         self._refresh()

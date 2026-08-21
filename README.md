@@ -75,6 +75,8 @@ enabled = true
 driver = epd2in13_v4
 update_interval = 5
 full_refresh_every = 60
+sleep_after = 300
+idle_screen = keep
 dummy_output_path =
 ```
 
@@ -83,9 +85,27 @@ dummy_output_path =
 | `driver` | `epd2in13_v4` for the real panel, or `dummy` to render PNG frames to disk instead. |
 | `update_interval` | Seconds between progress-bar refreshes while playing. |
 | `full_refresh_every` | Partial refreshes allowed before forcing a full refresh to clear ghosting. |
+| `sleep_after` | Seconds of stopped playback before the panel is put to sleep. `0` disables it. |
+| `idle_screen` | `keep` leaves the last frame on the panel when it sleeps, `blank` clears it first. |
 | `dummy_output_path` | Where the `dummy` driver writes its PNG. Defaults to `/tmp/mopidy-epaper.png`. |
 
 Confirm the extension is loaded with `mopidy deps list`.
+
+## Sleep and lock
+
+E-paper holds its image with no power at all, which shapes how this works.
+
+When playback has been stopped for `sleep_after` seconds the panel controller
+is powered down, leaving whatever was last drawn still visible. Playback wakes
+it again. Waking re-initialises the controller, so the first frame after a wake
+is always a full refresh.
+
+The panel can also be locked, like the hold switch on an old MP3 player. A
+locked panel draws a padlock, sleeps, and ignores everything until it is
+unlocked — the frozen frame *is* the lock screen, costing nothing to display.
+
+Lock is exposed to callers rather than bound to any particular button; see the
+input API below once it lands.
 
 ## Development
 

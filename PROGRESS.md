@@ -95,6 +95,34 @@ Local execution is off the table on this Mac by preference — verification
 happens on the Pi. (For the record: an attempt to create a local `.venv`
 under Homebrew Python 3.14 failed at the `ensurepip` step.)
 
+## Phase 1 — panel power and lock (written 2026-08-22, unverified)
+
+Implements the first phase of the roadmap. **Not yet run on hardware.**
+
+Refactor: `display.py` no longer knows about tracks. It is panel I/O only —
+`show(image, force_full)`, `sleep()`, `wake()` — and the new `ui.py` owns
+all screen state, including the content-key logic that used to live in
+`display.py`. This is what makes the refresh machinery reusable by a menu
+screen in phase 3.
+
+New behaviour:
+
+- Panel sleeps after `sleep_after` seconds of stopped playback and wakes
+  on playback. `idle_screen` chooses whether the last frame stays visible
+  (`keep`) or is cleared first (`blank`).
+- Lock state: draws a padlock, sleeps, and ignores playback updates until
+  unlocked. No way to trigger it yet — that arrives with the input API in
+  phase 2.
+- Redundant redraws are now skipped entirely. Previously every tick while
+  paused burned a partial refresh, and its ghosting budget, on an
+  identical frame.
+
+**Main risk to watch on hardware:** waking after `epd.sleep()` requires
+`init()` to reopen SPI through `epdconfig.module_init()`. It should work,
+because `module_exit()` leaves the gpiozero pin objects open, but that
+round trip has never been exercised. If the panel goes dead after its
+first sleep, this is why.
+
 ## Known limitations / deferred
 
 - **Radio stream titles don't update.** For a stream, the track URI and
