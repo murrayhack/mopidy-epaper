@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools >= 66", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "Mopidy-Epaper"
+version = "0.1.0"
+description = "Mopidy frontend that shows now-playing info on a Waveshare e-paper display"
+readme = "README.md"
+requires-python = ">= 3.9"
+license = { text = "MIT" }
+dependencies = [
+    "Mopidy >= 3.4",
+    "Pykka >= 3.0",
+    "Pillow >= 9.0",
+]
+
+[project.optional-dependencies]
+# Only installable on a Raspberry Pi. Kept out of the base dependencies so the
+# extension can be installed and developed on a normal machine with
+# `driver = dummy`.
+hardware = [
+    "spidev >= 3.5",
+    "gpiozero >= 2.0",
+]
+test = [
+    "pytest >= 7.0",
+]
+
+[project.entry-points."mopidy.ext"]
+epaper = "mopidy_epaper:Extension"
+
+[tool.setuptools]
+packages = ["mopidy_epaper", "mopidy_epaper.drivers"]
+
+[tool.setuptools.package-data]
+mopidy_epaper = ["ext.conf"]
