@@ -60,9 +60,30 @@ a Raspberry Pi Zero.
       ticker thread.
 - [x] `tests/test_layout.py` — unit tests for the rendering layer.
 
-**None of this has been executed.** No test run, no import check, no
-Mopidy load — the code is written but entirely unverified. First real
-run should happen on the Pi (or wherever a working Python env exists).
+## Verified on hardware (2026-08-21)
+
+Raspberry Pi Zero, Raspberry Pi OS Trixie (Python 3.13), Mopidy 3.4.2
+from apt, real Waveshare 2.13" V4 panel.
+
+- [x] `pytest tests/` — 11/11 pass.
+- [x] Extension discovered by Mopidy; `mopidy config` shows the `[epaper]`
+      schema.
+- [x] `EpaperFrontend` starts; lazy driver import and `epd.init()` work.
+- [x] Full refresh renders correctly, and **text orientation is upright** —
+      no rotation fix needed for `getbuffer()`'s counter-clockwise
+      rotation as mounted.
+- [x] Partial refresh confirmed: the progress bar advances every 5s with
+      **no panel flash**, which was the main design risk.
+- [x] Clean shutdown. The ~4s pause on "Stopping Mopidy frontends" is
+      `close()` plus the driver's own 2s pre-sleep delay, not a hang.
+- [ ] Track-change full refresh — untested, only one file in the library.
+- [ ] Anti-ghosting full refresh at `full_refresh_every` (~5 min of
+      playback) — not yet observed.
+
+Install note: Mopidy from apt lives in system Python, so the extension
+must too (`sudo pip install --break-system-packages --no-deps -e .` with
+deps from apt). A virtualenv does not work — the entry point is never
+discovered. Recorded in the README.
 
 ## Environment note
 
@@ -86,9 +107,11 @@ under Homebrew Python 3.14 failed at the `ensurepip` step.)
 
 ## Next steps
 
-1. Get it onto the Pi and `pip install -e '.[hardware]'`.
-2. `pytest tests/` to shake out any rendering bugs cheaply.
-3. Run Mopidy with `driver = dummy` first and inspect the PNG output
-   before switching to `driver = epd2in13_v4`.
-4. On the real panel, check the full-refresh flash on track change and
-   that the progress bar updates without flicker in between.
+1. Add a second track and confirm a track change triggers exactly one
+   full refresh.
+2. Leave a track playing for ~5 minutes to watch the anti-ghosting full
+   refresh fire, and judge whether `full_refresh_every = 60` is the right
+   cadence — too rare and ghosting builds up, too often and it flashes
+   for no reason.
+3. Check how a genuinely long title/artist renders, and whether the
+   album line is worth keeping at this panel size.
