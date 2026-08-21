@@ -23,16 +23,37 @@ on PyPI predates the V4 revision and does not include it.
 
 ## Installation
 
-On the Pi:
+### Raspberry Pi OS (Trixie / Debian 13)
+
+Mopidy from apt lives in the system Python, so the extension has to be
+installed there too — otherwise Mopidy will not discover its entry point. A
+virtualenv does not work for this.
+
+Let apt supply the dependencies and give pip nothing to resolve:
+
+```sh
+sudo apt install -y python3-pil python3-pykka python3-spidev python3-gpiozero \
+    python3-pytest fonts-dejavu-core
+sudo pip install --break-system-packages --no-deps -e .
+```
+
+`--no-deps` matters on a Pi Zero: without it pip may decide the apt-installed
+Pillow does not satisfy the version pin and rebuild it from source, which takes
+a very long time and shadows the apt version in `/usr/local`.
+
+`fonts-dejavu-core` is optional — text falls back to a bitmap font without it.
+
+### Other platforms
+
+The `hardware` extra pulls in `spidev` and `gpiozero`, which only build on
+Linux:
 
 ```sh
 pip install -e '.[hardware]'
-sudo apt install fonts-dejavu-core   # nicer text; falls back to a bitmap font
 ```
 
-The `hardware` extra pulls in `spidev` and `gpiozero`, which only build on
-Linux. For development on a machine without the panel, install without it and
-use `driver = dummy`:
+To work on the rendering without the panel attached, skip that extra and use
+`driver = dummy`:
 
 ```sh
 pip install -e '.[test]'
