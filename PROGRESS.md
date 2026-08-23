@@ -134,6 +134,31 @@ connect: Connection refused`), so playback state during testing is not
 entirely representative. Audio output is out of scope for this repo, but
 it makes the sleep/wake test noisier than it should be.
 
+## Phase 2 — input API (written 2026-08-23, unverified)
+
+`http.py` registers a Mopidy `http:app`, putting the input API on the web
+server Mopidy already runs:
+
+- `POST /epaper/input/<action>` — `202` accepted, `501` for actions that
+  exist in the vocabulary but have no behaviour yet, `400` for unknown
+  ones, `503` if the frontend never started.
+- `GET /epaper/status` — `{"locked", "asleep", "running"}`.
+- `GET /epaper/` — lists the vocabulary.
+
+Requests are fire-and-forget onto the actor. A full refresh takes seconds
+on a Pi Zero and this runs on Mopidy's Tornado IOLoop, which must not
+block; the status read is the one exception and it carries a timeout.
+
+The full action vocabulary is declared in `ui.ACTIONS` even though only
+lock/unlock/toggle_lock/wake do anything, so the contract stays stable
+when browsing lands. `examples/gpio_buttons.py` shows the intended
+consumer.
+
+**Not yet run on hardware.** The specific unknowns are whether Mopidy
+mounts the routes where expected, and whether
+`pykka.ActorRegistry.get_by_class()` resolves the frontend from the
+Tornado thread.
+
 ## Known limitations / deferred
 
 - **Radio stream titles don't update.** For a stream, the track URI and

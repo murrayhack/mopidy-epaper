@@ -91,19 +91,24 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
             except Exception:
                 logger.exception("Could not update the e-paper display")
 
-    def lock(self):
-        if self.ui is not None:
-            self.ui.lock()
-
-    def unlock(self):
-        if self.ui is not None:
-            self.ui.unlock()
+    def handle_input(self, action):
+        """Apply an input action, from the HTTP API or anywhere else."""
+        if self.ui is None:
+            return
+        try:
+            self.ui.handle_action(action)
+        except Exception:
+            logger.exception("Input action %s failed", action)
+            return
+        # Locking deliberately leaves the panel asleep; everything else should
+        # show its result straight away rather than waiting for the next tick.
+        if not self.ui.locked:
             self._refresh()
 
-    def wake(self):
-        if self.ui is not None:
-            self.ui.wake()
-            self._refresh()
+    def input_state(self):
+        if self.ui is None or self.display is None:
+            return {"locked": False, "asleep": False, "running": False}
+        return {"locked": self.ui.locked, "asleep": self.display.asleep, "running": True}
 
     def track_playback_started(self, tl_track):
         self._refresh()

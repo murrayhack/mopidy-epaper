@@ -24,6 +24,8 @@ class Extension(ext.Extension):
         return schema
 
     def setup(self, registry):
+        from . import http
         from .frontend import EpaperFrontend
 
         registry.add("frontend", EpaperFrontend)
+        registry.add("http:app", {"name": self.ext_name, "factory": http.factory})
