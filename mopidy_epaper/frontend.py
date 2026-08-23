@@ -26,6 +26,8 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
         self.ui = None
         self._stop_event = threading.Event()
         self._ticker = None
+        # Reading playback state and rendering it must be atomic; see _refresh.
+        self._refresh_lock = threading.Lock()
 
     def on_start(self):
         try:
@@ -67,21 +69,27 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
         if self.ui is None:
             return
 
-        try:
-            track = self.core.playback.get_current_track().get()
-            state = self.core.playback.get_state().get()
-            # Read the real position every time rather than extrapolating, so
-            # the progress bar cannot drift out of sync.
-            position = self.core.playback.get_time_position().get()
-            volume = self.core.mixer.get_volume().get()
-        except Exception:
-            logger.exception("Could not read playback state")
-            return
+        # Both the actor thread and the ticker call this. Reading state and
+        # rendering it has to be one atomic step: otherwise each thread takes
+        # its own snapshot and whichever renders second can be carrying the
+        # older one, which is enough to wake a panel that was just put to
+        # sleep, or to walk the progress bar backwards.
+        with self._refresh_lock:
+            try:
+                track = self.core.playback.get_current_track().get()
+                state = self.core.playback.get_state().get()
+                # Read the real position every time rather than extrapolating,
+                # so the progress bar cannot drift out of sync.
+                position = self.core.playback.get_time_position().get()
+                volume = self.core.mixer.get_volume().get()
+            except Exception:
+                logger.exception("Could not read playback state")
+                return
 
-        try:
-            self.ui.render_playback(track, state, position, volume)
-        except Exception:
-            logger.exception("Could not update the e-paper display")
+            try:
+                self.ui.render_playback(track, state, position, volume)
+            except Exception:
+                logger.exception("Could not update the e-paper display")
 
     def lock(self):
         if self.ui is not None:

@@ -117,11 +117,22 @@ New behaviour:
   paused burned a partial refresh, and its ghosting budget, on an
   identical frame.
 
-**Main risk to watch on hardware:** waking after `epd.sleep()` requires
-`init()` to reopen SPI through `epdconfig.module_init()`. It should work,
-because `module_exit()` leaves the gpiozero pin objects open, but that
-round trip has never been exercised. If the panel goes dead after its
-first sleep, this is why.
+**Verified on hardware 2026-08-23:** the panel sleeps after the configured
+idle period and wakes cleanly on playback. `epd.init()` does reopen SPI
+after `module_exit()` closed it, which was the main risk in this phase.
+
+One bug found in that first run: the panel slept and then woke itself
+57ms later, from the other thread. `frontend._refresh()` read playback
+state and rendered it as two separate steps, so the ticker and the actor
+each took their own snapshot and whichever rendered second could be
+carrying the older one — enough to wake a panel that had just gone to
+sleep, and enough to walk the progress bar backwards. Reading and
+rendering are now atomic under a lock.
+
+Note the Pi has no working audio sink (`GStreamer warning: Failed to
+connect: Connection refused`), so playback state during testing is not
+entirely representative. Audio output is out of scope for this repo, but
+it makes the sleep/wake test noisier than it should be.
 
 ## Known limitations / deferred
 
