@@ -169,6 +169,28 @@ resolve the frontend from the Tornado thread.
 This also closes the one loose end from phase 1: no spurious wake was
 observed after the panel slept, so the read-then-render race fix holds.
 
+## Phase 3 — library browsing (written 2026-08-23, unverified)
+
+The navigation actions declared in phase 2 now do something.
+
+- `menu.py` renders a scrollable list — header with a position counter,
+  five rows, selected row inverted, a drawn arrow marking directories. No
+  Mopidy import, same discipline as `layout.py`.
+- `ui.py` holds a stack of browse frames over `core.library.browse()`.
+  Library access is injected into `Ui` as two callables rather than
+  imported, so the whole state machine is testable without Mopidy.
+- Selecting a track queues its siblings and starts at the chosen one, so
+  picking a song from an album plays the album.
+- The browser closes itself after `menu_timeout` seconds and hands the
+  screen back to now-playing. Playback ticks do not paint over it while
+  it is open.
+- Scrolling uses partial refreshes, so it does not flash.
+
+**Not yet run on hardware.** Unknowns: whether five rows at font size 14
+is actually readable on a 2.13" panel, whether partial-refresh ghosting
+is acceptable while scrolling quickly, and whether `browse(None)` returns
+a useful root with only mopidy-local enabled.
+
 ## Known limitations / deferred
 
 - **Radio stream titles don't update.** For a stream, the track URI and

@@ -20,6 +20,7 @@ class Extension(ext.Extension):
         schema["full_refresh_every"] = config.Integer(minimum=1)
         schema["sleep_after"] = config.Integer(minimum=0)
         schema["idle_screen"] = config.String(choices=["keep", "blank"])
+        schema["menu_timeout"] = config.Integer(minimum=0)
         schema["dummy_output_path"] = config.Path(optional=True)
         return schema
 
