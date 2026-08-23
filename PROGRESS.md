@@ -186,10 +186,22 @@ The navigation actions declared in phase 2 now do something.
   it is open.
 - Scrolling uses partial refreshes, so it does not flash.
 
-**Not yet run on hardware.** Unknowns: whether five rows at font size 14
-is actually readable on a 2.13" panel, whether partial-refresh ghosting
-is acceptable while scrolling quickly, and whether `browse(None)` returns
-a useful root with only mopidy-local enabled.
+**Verified on hardware 2026-08-23.** Browsing the library on the panel,
+descending several levels, selecting a track and having it play all work.
+
+- Five rows at font size 14 is readable on the 2.13" panel. No change
+  needed.
+- The root `browse(None)` gives `Files` and `Local media`, which is a
+  reasonable starting point, so the browser opens there rather than at
+  some curated menu.
+- Ghosting while scrolling looked fine on a first pass, but has not been
+  pushed hard. **Revisit** — scroll quickly through a long list and see
+  whether text smears before the periodic full refresh clears it.
+
+Note for future diagnosis: empty categories under `Local media` mean an
+empty mopidy-local library, not a display fault. `mopidy local scan` has
+to have actually indexed something. The browser renders "Empty" perfectly
+correctly in that case, which reads like a bug and is not one.
 
 ## Known limitations / deferred
 
