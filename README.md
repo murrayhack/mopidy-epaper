@@ -5,7 +5,9 @@ information — title, artist, album, progress, queue position and volume — on
 Waveshare 2.13" V4 e-paper display attached to a Raspberry Pi Zero.
 
 The status strip carries the progress bar, elapsed and total time, play state,
-where the track sits in the queue, and the volume.
+where the track sits in the queue, and the volume. Muting slashes through the
+speaker rather than hiding the level, so you can see what unmuting will return
+to.
 
 E-paper is slow to refresh, so the extension splits updates in two: the whole
 screen is redrawn (a full, flashing refresh) only when the track changes, while
@@ -118,7 +120,13 @@ API instead, so anything that can make a request can drive the panel: a button
 script, a phone, `curl`. Buttons never become a dependency, and screen
 behaviour can be built and tested before any hardware exists.
 
-It rides on the web server Mopidy already runs.
+It rides on the web server Mopidy already runs, and is separate from Mopidy's
+own JSON-RPC API at `/mopidy/rpc`. The split follows what each one owns:
+playback, the tracklist and the mixer belong to Mopidy, so they go through
+JSON-RPC; the panel belongs to this extension, so locking, waking and menu
+navigation come here. Mopidy offers extensions no way to add JSON-RPC methods
+in any case, and a plain `POST` is far easier to call from a button script than
+a JSON-RPC envelope.
 
 ```sh
 curl -X POST http://localhost:6680/epaper/input/toggle_lock

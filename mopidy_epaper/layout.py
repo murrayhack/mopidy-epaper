@@ -25,6 +25,8 @@ STATUS_TOP = 86
 
 MARGIN = 6
 
+VOLUME_GLYPH_WIDTH = 10
+
 _BOLD_FONTS = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
@@ -114,6 +116,7 @@ def render(
     locked=False,
     number=None,
     total=None,
+    muted=False,
 ):
     """Render the now-playing screen.
 
@@ -124,7 +127,7 @@ def render(
     if elapsed_only and base is not None:
         draw = ImageDraw.Draw(base)
         draw.rectangle((0, STATUS_TOP, WIDTH, HEIGHT), fill=WHITE)
-        _draw_status(draw, track, state, position_ms, volume, number, total)
+        _draw_status(draw, track, state, position_ms, volume, number, total, muted)
         return base
 
     image = blank()
@@ -132,7 +135,7 @@ def render(
     _draw_track(draw, track, reserve_right=locked)
     if locked:
         _draw_lock_glyph(draw, WIDTH - MARGIN - 11, 8)
-    _draw_status(draw, track, state, position_ms, volume, number, total)
+    _draw_status(draw, track, state, position_ms, volume, number, total, muted)
     return image
 
 
@@ -171,7 +174,7 @@ def _draw_track(draw, track, reserve_right=False):
         )
 
 
-def _draw_status(draw, track, state, position_ms, volume, number=None, total=None):
+def _draw_status(draw, track, state, position_ms, volume, number=None, total=None, muted=False):
     length_ms = getattr(track, "length", None)
 
     bar_top = STATUS_TOP + 2
@@ -198,10 +201,12 @@ def _draw_status(draw, track, state, position_ms, volume, number=None, total=Non
 
     right_edge = WIDTH - MARGIN
     if volume is not None:
-        vol_text = f"vol {volume}"
+        vol_text = str(volume)
         vol_width = draw.textlength(vol_text, font=text_font)
         draw.text((right_edge - vol_width, text_y), vol_text, font=text_font, fill=BLACK)
-        right_edge -= vol_width + 10
+        glyph_x = right_edge - vol_width - 4 - VOLUME_GLYPH_WIDTH
+        _draw_volume_glyph(draw, glyph_x, text_y + 2, muted=muted)
+        right_edge = glyph_x - 10
 
     if number and total:
         # Where you are in the queue. Placed left of the volume rather than
@@ -223,6 +228,23 @@ def _draw_state_glyph(draw, x, y, state, size=9):
         draw.rectangle((x + size - bar, y, x + size, y + size), fill=BLACK)
     else:
         draw.rectangle((x, y, x + size, y + size), fill=BLACK)
+
+
+def _draw_volume_glyph(draw, x, y, size=VOLUME_GLYPH_WIDTH, muted=False):
+    """A speaker, drawn as primitives like the other glyphs.
+
+    Muting is shown as a slash through it rather than by hiding the level, so
+    you can still see what the volume will return to.
+    """
+    step = size / 3
+    # Body, then the cone flaring out to the right.
+    draw.rectangle((x, y + step, x + step, y + 2 * step), fill=BLACK)
+    draw.polygon(
+        [(x + step, y + step), (x + size, y), (x + size, y + size), (x + step, y + 2 * step)],
+        fill=BLACK,
+    )
+    if muted:
+        draw.line((x - 1, y + size + 1, x + size + 1, y - 1), fill=BLACK, width=1)
 
 
 def _draw_lock_glyph(draw, x, y, width=11, height=15):

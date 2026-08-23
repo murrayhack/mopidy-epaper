@@ -146,12 +146,13 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
                 position = self.core.playback.get_time_position().get()
                 volume = self.core.mixer.get_volume().get()
                 number, total = self.player.position()
+                muted = self.core.mixer.get_mute().get()
             except Exception:
                 logger.exception("Could not read playback state")
                 return
 
             try:
-                self.ui.render_playback(track, state, position, volume, number, total)
+                self.ui.render_playback(track, state, position, volume, number, total, muted)
             except Exception:
                 logger.exception("Could not update the e-paper display")
 

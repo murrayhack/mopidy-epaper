@@ -783,3 +783,21 @@ def test_queue_growing_redraws_the_status_strip():
 def test_status_key_covers_the_queue_position():
     assert ui.status_key("playing", 5000, 80, 1, 2) != ui.status_key("playing", 5000, 80, 1, 3)
     assert ui.status_key("playing", 5000, 80, 1, 2) == ui.status_key("playing", 5000, 80, 1, 2)
+
+
+def test_muting_redraws_the_status_strip():
+    display = FakeDisplay()
+    screen = make_ui(display)
+    track = FakeTrack()
+
+    screen.render_playback(track, "playing", 5000, 80, 1, 2, False)
+    screen.render_playback(track, "playing", 5000, 80, 1, 2, True)
+
+    # Same track, second and level: only mute changed, and it must still show.
+    assert display.shows == [True, False]
+
+
+def test_status_key_covers_mute():
+    assert ui.status_key("playing", 5000, 80, 1, 2, False) != ui.status_key(
+        "playing", 5000, 80, 1, 2, True
+    )

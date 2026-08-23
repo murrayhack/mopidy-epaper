@@ -183,3 +183,38 @@ def test_long_duration_and_queue_position_do_not_overlap():
     image = layout.render(long_track, "playing", 3725000, 100, number=12, total=34)
 
     assert image.size == (layout.WIDTH, layout.HEIGHT)
+
+
+def test_volume_renders_as_a_glyph_not_the_word_vol():
+    image = layout.render(FakeTrack(), "playing", 1000, 50)
+
+    assert image.mode == "1"
+
+
+def test_muting_changes_the_status_strip():
+    unmuted = layout.render(FakeTrack(), "playing", 1000, 50)
+    muted = layout.render(FakeTrack(), "playing", 1000, 50, muted=True)
+
+    assert unmuted.tobytes() != muted.tobytes()
+
+
+def test_muted_still_shows_the_level():
+    # The slash marks mute; the number stays so you can see what it returns to.
+    at_fifty = layout.render(FakeTrack(), "playing", 1000, 50, muted=True)
+    at_ninety = layout.render(FakeTrack(), "playing", 1000, 90, muted=True)
+
+    assert at_fifty.tobytes() != at_ninety.tobytes()
+
+
+def test_mute_without_a_volume_does_not_raise():
+    image = layout.render(FakeTrack(), "playing", 1000, None, muted=True)
+
+    assert image.size == (layout.WIDTH, layout.HEIGHT)
+
+
+def test_glyph_and_counter_fit_alongside_a_long_duration():
+    long_track = FakeTrack(length=4500000)
+
+    image = layout.render(long_track, "playing", 3725000, 100, number=12, total=34, muted=True)
+
+    assert image.size == (layout.WIDTH, layout.HEIGHT)
