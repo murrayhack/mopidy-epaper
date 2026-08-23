@@ -83,6 +83,7 @@ sleep_after = 300
 idle_screen = keep
 menu_timeout = 20
 web_remote = true
+input_coalesce_ms = 80
 dummy_output_path =
 ```
 
@@ -95,6 +96,7 @@ dummy_output_path =
 | `idle_screen` | `keep` leaves the last frame on the panel when it sleeps, `blank` clears it first. |
 | `menu_timeout` | Seconds without input before the library browser closes itself. `0` keeps it open. |
 | `web_remote` | Serve the remote page at `/epaper/`. `false` serves the JSON action listing there instead. |
+| `input_coalesce_ms` | How long to gather further presses before drawing, so a burst of them costs one refresh instead of several. `0` draws on every press. |
 | `dummy_output_path` | Where the `dummy` driver writes its PNG. Defaults to `/tmp/mopidy-epaper.png`. |
 
 Confirm the extension is loaded with `mopidy deps list`.
@@ -200,6 +202,13 @@ screen back to now-playing. Set it to `0` to keep it open until dismissed.
 
 Scrolling uses partial refreshes, so it does not flash — the periodic full
 refresh that clears ghosting still applies.
+
+Presses are gathered for `input_coalesce_ms` before the panel is drawn, so
+holding down or tapping quickly moves the cursor several rows and refreshes
+once, rather than stepping through every position in turn. Raise it if scrolling
+still feels like it is catching up; lower it, or set `0`, to draw on every
+press. The floor is the panel itself: a partial refresh takes a few hundred
+milliseconds of physics, and no setting makes that shorter.
 
 If a library category shows **Empty**, that is not a display fault: it means
 mopidy-local has nothing indexed. Run `mopidy local scan`.

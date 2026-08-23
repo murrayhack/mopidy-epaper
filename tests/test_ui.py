@@ -945,3 +945,91 @@ def test_playlist_failure_leaves_an_empty_list_rather_than_raising():
 
     assert screen.in_menu
     assert screen._stack[-1]["items"] == []
+
+
+class DirtyRecorder:
+    def __init__(self):
+        self.calls = 0
+
+    def __call__(self):
+        self.calls += 1
+
+
+def test_menu_draws_inline_without_a_notifier():
+    display = FakeDisplay()
+    screen = make_ui(display)
+
+    screen.handle_action("home")
+
+    assert display.shows
+
+
+def test_menu_draws_are_deferred_when_a_notifier_is_given():
+    display = FakeDisplay()
+    dirty = DirtyRecorder()
+    screen = ui.Ui(
+        {"sleep_after": 300, "idle_screen": "keep", "menu_timeout": 20},
+        display,
+        player=FakePlayer(),
+        on_dirty=dirty,
+    )
+
+    screen.handle_action("home")
+
+    assert display.shows == []
+    assert dirty.calls == 1
+
+
+def test_a_burst_of_presses_collapses_into_one_refresh():
+    display = FakeDisplay()
+    screen = ui.Ui(
+        {"sleep_after": 300, "idle_screen": "keep", "menu_timeout": 20},
+        display,
+        player=FakePlayer(),
+        on_dirty=DirtyRecorder(),
+    )
+    screen.handle_action("home")
+
+    for _ in range(5):
+        screen.handle_action("down")
+    screen.flush()
+
+    # Five moves, one draw, showing where the cursor ended up.
+    assert len(display.shows) == 1
+    assert screen._stack[-1]["selected"] == 5 % len(screen._stack[-1]["items"])
+
+
+def test_flush_is_a_no_op_when_nothing_changed():
+    display = FakeDisplay()
+    screen = ui.Ui(
+        {"sleep_after": 300, "idle_screen": "keep", "menu_timeout": 20},
+        display,
+        player=FakePlayer(),
+        on_dirty=DirtyRecorder(),
+    )
+    screen.handle_action("home")
+    screen.flush()
+    shows = len(display.shows)
+
+    screen.flush()
+
+    assert len(display.shows) == shows
+
+
+def test_flush_does_not_draw_over_a_locked_panel():
+    display = FakeDisplay()
+    screen = ui.Ui(
+        {"sleep_after": 300, "idle_screen": "keep", "menu_timeout": 20},
+        display,
+        player=FakePlayer(),
+        on_dirty=DirtyRecorder(),
+    )
+    screen.handle_action("home")
+    render_playback(screen, FakeTrack(), "playing", 0, 80)
+    screen.handle_action("lock")
+    shows = len(display.shows)
+
+    screen.flush()
+
+    assert len(display.shows) == shows
+    assert display.asleep

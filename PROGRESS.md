@@ -323,6 +323,29 @@ package data — both silent failures otherwise.
 127.0.0.1 by default, so this is localhost-only until `[http] hostname`
 changes, which exposes all of Mopidy's API rather than just this page.
 
+## Input coalescing (2026-08-23, unverified)
+
+Scrolling felt slow. There was no artificial delay to remove — the wait
+is `displayPartial()` writing over SPI and polling the busy pin — but
+every press was rendering, so five quick presses meant five sequential
+refreshes and the panel stepping through every intermediate position.
+
+Menu draws are now deferred to a render thread. `Ui` takes an `on_dirty`
+notifier; with one, navigation marks the menu stale instead of drawing,
+and `flush()` renders the current state. The frontend waits
+`input_coalesce_ms` (default 80) after the first notification so a burst
+lands before it draws once.
+
+Without a notifier `Ui` still draws inline, which keeps the existing
+tests meaningful rather than having them assert on a deferred side
+effect.
+
+A second benefit: a full refresh no longer blocks the actor thread, so
+Mopidy's events stop queueing behind the SPI bus.
+
+The floor is still the panel — a partial refresh is a few hundred
+milliseconds and no setting changes that.
+
 ## Backlog
 
 Discussed and worth doing, not yet built:

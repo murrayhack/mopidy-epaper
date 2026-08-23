@@ -6,6 +6,7 @@ Mopidy glue only: it turns playback events and a periodic tick into calls on
 
 import logging
 import threading
+import time
 
 import pykka
 
@@ -97,6 +98,8 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
         self.player = None
         self._stop_event = threading.Event()
         self._ticker = None
+        self._renderer = None
+        self._render_wanted = threading.Event()
         # Reading playback state and rendering it must be atomic; see _refresh.
         self._refresh_lock = threading.Lock()
 
@@ -110,17 +113,25 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
             return
 
         self.player = MopidyPlayer(self.core)
-        self.ui = Ui(self.config, self.display, player=self.player)
+        self.ui = Ui(
+            self.config, self.display, player=self.player, on_dirty=self._render_wanted.set
+        )
         self._refresh()
         self._ticker = threading.Thread(
             target=self._tick_loop, name="EpaperTicker", daemon=True
         )
         self._ticker.start()
+        self._renderer = threading.Thread(
+            target=self._render_loop, name="EpaperRenderer", daemon=True
+        )
+        self._renderer.start()
 
     def on_stop(self):
         self._stop_event.set()
-        if self._ticker is not None:
-            self._ticker.join(timeout=5)
+        self._render_wanted.set()
+        for thread in (self._ticker, self._renderer):
+            if thread is not None:
+                thread.join(timeout=5)
         if self.display is not None:
             self.display.close()
 
@@ -136,6 +147,31 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
                 self._refresh()
             except Exception:
                 logger.exception("e-paper tick failed")
+
+    def _render_loop(self):
+        """Draw pending menu changes, off the actor thread.
+
+        Two things fall out of this. A burst of presses collapses into one
+        refresh instead of the panel stepping through every position; and a
+        slow full refresh no longer blocks the actor, so Mopidy's events do not
+        queue up behind the SPI bus.
+        """
+        coalesce = self.config["input_coalesce_ms"] / 1000
+        while not self._stop_event.is_set():
+            if not self._render_wanted.wait(timeout=1):
+                continue
+            self._render_wanted.clear()
+            if self._stop_event.is_set():
+                break
+            if coalesce:
+                # Let anything already on its way land before drawing, so the
+                # refresh shows where the cursor ended up.
+                time.sleep(coalesce)
+                self._render_wanted.clear()
+            try:
+                self.ui.flush()
+            except Exception:
+                logger.exception("e-paper render failed")
 
     def _refresh(self):
         if self.ui is None:
