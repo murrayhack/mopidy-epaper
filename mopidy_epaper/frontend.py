@@ -52,6 +52,12 @@ class MopidyPlayer:
     def queue(self):
         return self._core.tracklist.get_tl_tracks().get()
 
+    def position(self):
+        """Where the current track sits in the queue, as 1-based ``(n, total)``."""
+        index = self._core.tracklist.index().get()
+        total = self._core.tracklist.get_length().get()
+        return (None if index is None else index + 1, total)
+
     def play_queued(self, tlid):
         self._core.playback.play(tlid=tlid).get()
 
@@ -79,6 +85,7 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
         self.core = core
         self.display = None
         self.ui = None
+        self.player = None
         self._stop_event = threading.Event()
         self._ticker = None
         # Reading playback state and rendering it must be atomic; see _refresh.
@@ -93,7 +100,8 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
             self.stop()
             return
 
-        self.ui = Ui(self.config, self.display, player=MopidyPlayer(self.core))
+        self.player = MopidyPlayer(self.core)
+        self.ui = Ui(self.config, self.display, player=self.player)
         self._refresh()
         self._ticker = threading.Thread(
             target=self._tick_loop, name="EpaperTicker", daemon=True
@@ -137,12 +145,13 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
                 # so the progress bar cannot drift out of sync.
                 position = self.core.playback.get_time_position().get()
                 volume = self.core.mixer.get_volume().get()
+                number, total = self.player.position()
             except Exception:
                 logger.exception("Could not read playback state")
                 return
 
             try:
-                self.ui.render_playback(track, state, position, volume)
+                self.ui.render_playback(track, state, position, volume, number, total)
             except Exception:
                 logger.exception("Could not update the e-paper display")
 

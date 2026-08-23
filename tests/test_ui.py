@@ -92,6 +92,9 @@ class FakePlayer:
     def queue(self):
         return self._queue
 
+    def position(self):
+        return (1, len(self._queue)) if self._queue else (None, 0)
+
     def play_queued(self, tlid):
         self.played_tlids.append(tlid)
 
@@ -753,3 +756,30 @@ def test_browse_failure_leaves_an_empty_listing_rather_than_raising():
 
     assert screen.in_menu
     assert screen._stack[-1]["items"] == []
+
+
+def test_queue_position_is_drawn_and_changes_the_screen():
+    without = make_ui(FakeDisplay())
+    without.render_playback(FakeTrack(), "playing", 5000, 80)
+
+    with_counter = make_ui(FakeDisplay())
+    with_counter.render_playback(FakeTrack(), "playing", 5000, 80, 3, 12)
+
+    assert without._base_image.tobytes() != with_counter._base_image.tobytes()
+
+
+def test_queue_growing_redraws_the_status_strip():
+    display = FakeDisplay()
+    screen = make_ui(display)
+    track = FakeTrack()
+
+    screen.render_playback(track, "playing", 5000, 80, 1, 2)
+    screen.render_playback(track, "playing", 5000, 80, 1, 3)
+
+    # Same track and same second, but the total changed, so it must redraw.
+    assert display.shows == [True, False]
+
+
+def test_status_key_covers_the_queue_position():
+    assert ui.status_key("playing", 5000, 80, 1, 2) != ui.status_key("playing", 5000, 80, 1, 3)
+    assert ui.status_key("playing", 5000, 80, 1, 2) == ui.status_key("playing", 5000, 80, 1, 2)
