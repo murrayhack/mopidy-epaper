@@ -246,6 +246,9 @@ screen redrew identically. The speaker glyph now carries a slash, and
 `muted` joined `status_key` so the redraw actually happens. The level
 stays visible so you can see what unmuting will return to.
 
+**Verified on hardware 2026-08-23.** The speaker glyph is legible at
+10px and mute/unmute both show correctly.
+
 **Candidate refactor:** `layout.render` now takes ten parameters and
 `render_playback` seven. A small playback-state value object would read
 better than threading each new field through three call sites. Not urgent,

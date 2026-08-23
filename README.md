@@ -120,7 +120,13 @@ API instead, so anything that can make a request can drive the panel: a button
 script, a phone, `curl`. Buttons never become a dependency, and screen
 behaviour can be built and tested before any hardware exists.
 
-It rides on the web server Mopidy already runs.
+It rides on the web server Mopidy already runs, and is separate from Mopidy's
+own JSON-RPC API at `/mopidy/rpc`. The split follows what each one owns:
+playback, the tracklist and the mixer belong to Mopidy, so they go through
+JSON-RPC; the panel belongs to this extension, so locking, waking and menu
+navigation come here. Mopidy offers extensions no way to add JSON-RPC methods
+in any case, and a plain `POST` is far easier to call from a button script than
+a JSON-RPC envelope.
 
 ```sh
 curl -X POST http://localhost:6680/epaper/input/toggle_lock
