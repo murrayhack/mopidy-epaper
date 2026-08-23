@@ -38,7 +38,7 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
             self.stop()
             return
 
-        self.ui = Ui(self.config, self.display)
+        self.ui = Ui(self.config, self.display, browse=self._browse, play=self._play)
         self._refresh()
         self._ticker = threading.Thread(
             target=self._tick_loop, name="EpaperTicker", daemon=True
@@ -100,15 +100,38 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
         except Exception:
             logger.exception("Input action %s failed", action)
             return
-        # Locking deliberately leaves the panel asleep; everything else should
-        # show its result straight away rather than waiting for the next tick.
-        if not self.ui.locked:
+        # Locking deliberately leaves the panel asleep, and the browser owns
+        # the screen while it is open. Otherwise show the result straight away
+        # rather than waiting for the next tick.
+        if not self.ui.locked and not self.ui.in_menu:
             self._refresh()
+
+    def _browse(self, uri):
+        """Library contents for the browser. ``None`` is the root."""
+        return self.core.library.browse(uri).get()
+
+    def _play(self, uris, start_uri):
+        """Replace the queue with ``uris`` and start at ``start_uri``."""
+        self.core.tracklist.clear().get()
+        self.core.tracklist.add(uris=uris).get()
+        # Match on URI rather than index: add() silently drops anything it
+        # cannot resolve, so positions do not necessarily line up.
+        tl_tracks = self.core.tracklist.get_tl_tracks().get()
+        target = next((t for t in tl_tracks if t.track.uri == start_uri), None)
+        if target is not None:
+            self.core.playback.play(tlid=target.tlid).get()
+        else:
+            self.core.playback.play().get()
 
     def input_state(self):
         if self.ui is None or self.display is None:
-            return {"locked": False, "asleep": False, "running": False}
-        return {"locked": self.ui.locked, "asleep": self.display.asleep, "running": True}
+            return {"locked": False, "asleep": False, "in_menu": False, "running": False}
+        return {
+            "locked": self.ui.locked,
+            "asleep": self.display.asleep,
+            "in_menu": self.ui.in_menu,
+            "running": True,
+        }
 
     def track_playback_started(self, tl_track):
         self._refresh()

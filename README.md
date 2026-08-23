@@ -77,6 +77,7 @@ update_interval = 5
 full_refresh_every = 60
 sleep_after = 300
 idle_screen = keep
+menu_timeout = 20
 dummy_output_path =
 ```
 
@@ -87,6 +88,7 @@ dummy_output_path =
 | `full_refresh_every` | Partial refreshes allowed before forcing a full refresh to clear ghosting. |
 | `sleep_after` | Seconds of stopped playback before the panel is put to sleep. `0` disables it. |
 | `idle_screen` | `keep` leaves the last frame on the panel when it sleeps, `blank` clears it first. |
+| `menu_timeout` | Seconds without input before the library browser closes itself. `0` keeps it open. |
 | `dummy_output_path` | Where the `dummy` driver writes its PNG. Defaults to `/tmp/mopidy-epaper.png`. |
 
 Confirm the extension is loaded with `mopidy deps list`.
@@ -125,18 +127,36 @@ curl -X POST http://localhost:6680/epaper/input/wake
 curl http://localhost:6680/epaper/status
 ```
 
-| Action | Status |
+| Action | Effect |
 | --- | --- |
-| `lock`, `unlock`, `toggle_lock` | Implemented |
-| `wake` | Implemented |
-| `up`, `down`, `select`, `back`, `home` | Accepted by the API, no behaviour yet — they arrive with library browsing |
+| `up`, `down` | Move the browser selection, wrapping at either end |
+| `select` | Descend into a directory, or play a track |
+| `back` | Up one level, or leave the browser at the root |
+| `home` | Open the browser at the library root, or close it |
+| `lock`, `unlock`, `toggle_lock` | Freeze the panel and sleep it |
+| `wake` | Wake an idle panel |
 
-The whole vocabulary is declared up front so the contract is stable. Actions
-that do nothing yet return `501`, rather than pretending to have worked.
-Unknown actions return `400`, and `GET /epaper/` lists them.
+From the now-playing screen, any of `up`, `down`, `select` or `home` opens the
+browser. Unknown actions return `400`, and `GET /epaper/` lists the vocabulary.
 
 Accepted actions return `202` immediately: a full refresh takes seconds on a Pi
 Zero, and the request must not hold up Mopidy's web server while it happens.
+
+## Browsing the library
+
+`home` (or any navigation action) opens a browser over Mopidy's library. It is
+the same tree `core.library.browse()` exposes, so whatever backends are enabled
+show up in it.
+
+Selecting a track queues every track listed alongside it and starts at the one
+picked, so choosing a song from an album plays the album rather than stopping
+after one track.
+
+The browser closes itself after `menu_timeout` seconds without input and hands
+the screen back to now-playing. Set it to `0` to keep it open until dismissed.
+
+Scrolling uses partial refreshes, so it does not flash — the periodic full
+refresh that clears ghosting still applies.
 
 ### Buttons
 

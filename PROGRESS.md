@@ -169,6 +169,40 @@ resolve the frontend from the Tornado thread.
 This also closes the one loose end from phase 1: no spurious wake was
 observed after the panel slept, so the read-then-render race fix holds.
 
+## Phase 3 — library browsing (written 2026-08-23, unverified)
+
+The navigation actions declared in phase 2 now do something.
+
+- `menu.py` renders a scrollable list — header with a position counter,
+  five rows, selected row inverted, a drawn arrow marking directories. No
+  Mopidy import, same discipline as `layout.py`.
+- `ui.py` holds a stack of browse frames over `core.library.browse()`.
+  Library access is injected into `Ui` as two callables rather than
+  imported, so the whole state machine is testable without Mopidy.
+- Selecting a track queues its siblings and starts at the chosen one, so
+  picking a song from an album plays the album.
+- The browser closes itself after `menu_timeout` seconds and hands the
+  screen back to now-playing. Playback ticks do not paint over it while
+  it is open.
+- Scrolling uses partial refreshes, so it does not flash.
+
+**Verified on hardware 2026-08-23.** Browsing the library on the panel,
+descending several levels, selecting a track and having it play all work.
+
+- Five rows at font size 14 is readable on the 2.13" panel. No change
+  needed.
+- The root `browse(None)` gives `Files` and `Local media`, which is a
+  reasonable starting point, so the browser opens there rather than at
+  some curated menu.
+- Ghosting while scrolling looked fine on a first pass, but has not been
+  pushed hard. **Revisit** — scroll quickly through a long list and see
+  whether text smears before the periodic full refresh clears it.
+
+Note for future diagnosis: empty categories under `Local media` mean an
+empty mopidy-local library, not a display fault. `mopidy local scan` has
+to have actually indexed something. The browser renders "Empty" perfectly
+correctly in that case, which reads like a bug and is not one.
+
 ## Known limitations / deferred
 
 - **Radio stream titles don't update.** For a stream, the track URI and

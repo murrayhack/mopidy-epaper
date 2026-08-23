@@ -19,6 +19,15 @@ class FakeTrack:
         self.album = None
 
 
+class _Ref:
+    """Duck-types mopidy.models.Ref."""
+
+    def __init__(self, uri, name, type="track"):
+        self.uri = uri
+        self.name = name
+        self.type = type
+
+
 class FakeDisplay:
     """Records what the UI asked of the panel, without any hardware."""
 
@@ -41,8 +50,46 @@ class FakeDisplay:
         self.wakes += 1
 
 
-def make_ui(display, sleep_after=300, idle_screen="keep"):
-    return ui.Ui({"sleep_after": sleep_after, "idle_screen": idle_screen}, display)
+LIBRARY = {
+    None: [
+        _Ref("local:directory?type=album", "Albums", "directory"),
+        _Ref("local:directory?type=artist", "Artists", "directory"),
+    ],
+    "local:directory?type=album": [_Ref("local:album:1", "An Album", "directory")],
+    "local:album:1": [
+        _Ref("local:track:1", "One"),
+        _Ref("local:track:2", "Two"),
+        _Ref("local:track:3", "Three"),
+    ],
+}
+
+
+def fake_browse(uri):
+    return LIBRARY.get(uri, [])
+
+
+class PlayRecorder:
+    def __init__(self):
+        self.calls = []
+
+    def __call__(self, uris, start_uri):
+        self.calls.append((uris, start_uri))
+
+
+def make_ui(
+    display,
+    sleep_after=300,
+    idle_screen="keep",
+    menu_timeout=20,
+    browse=fake_browse,
+    play=None,
+):
+    config = {
+        "sleep_after": sleep_after,
+        "idle_screen": idle_screen,
+        "menu_timeout": menu_timeout,
+    }
+    return ui.Ui(config, display, browse=browse, play=play)
 
 
 @pytest.fixture
@@ -348,17 +395,189 @@ def test_wake_action_does_nothing_while_locked():
     assert display.wakes == 0
 
 
-def test_unimplemented_actions_are_ignored_without_raising():
+def test_implemented_actions_are_a_subset_of_the_vocabulary():
+    assert ui.IMPLEMENTED_ACTIONS <= ui.ACTIONS
+
+
+def test_back_from_now_playing_does_nothing():
     display = FakeDisplay()
     screen = make_ui(display)
     screen.render_playback(FakeTrack(), "playing", 0, 80)
     shows_before = len(display.shows)
 
-    for action in ("up", "down", "select", "back", "home"):
-        screen.handle_action(action)
+    screen.handle_action("back")
 
+    assert not screen.in_menu
     assert len(display.shows) == shows_before
 
 
-def test_implemented_actions_are_a_subset_of_the_vocabulary():
-    assert ui.IMPLEMENTED_ACTIONS <= ui.ACTIONS
+def test_navigation_from_now_playing_opens_the_browser():
+    display = FakeDisplay()
+    screen = make_ui(display)
+    screen.render_playback(FakeTrack(), "playing", 0, 80)
+
+    screen.handle_action("down")
+
+    assert screen.in_menu
+
+
+def test_browser_starts_at_the_library_root():
+    display = FakeDisplay()
+    screen = make_ui(display)
+
+    screen.handle_action("home")
+
+    assert screen.in_menu
+    assert screen._stack[-1]["title"] == ui.ROOT_TITLE
+    assert [i.name for i in screen._stack[-1]["items"]] == ["Albums", "Artists"]
+
+
+def test_selection_moves_and_wraps():
+    display = FakeDisplay()
+    screen = make_ui(display)
+    screen.handle_action("home")
+
+    screen.handle_action("down")
+    assert screen._stack[-1]["selected"] == 1
+
+    # Only two entries at the root, so this wraps back to the top.
+    screen.handle_action("down")
+    assert screen._stack[-1]["selected"] == 0
+
+    screen.handle_action("up")
+    assert screen._stack[-1]["selected"] == 1
+
+
+def test_select_descends_into_a_directory():
+    display = FakeDisplay()
+    screen = make_ui(display)
+    screen.handle_action("home")
+
+    screen.handle_action("select")
+
+    assert screen._stack[-1]["title"] == "Albums"
+    assert len(screen._stack) == 2
+
+
+def test_back_pops_one_level():
+    display = FakeDisplay()
+    screen = make_ui(display)
+    screen.handle_action("home")
+    screen.handle_action("select")
+
+    screen.handle_action("back")
+
+    assert screen.in_menu
+    assert len(screen._stack) == 1
+    assert screen._stack[-1]["title"] == ui.ROOT_TITLE
+
+
+def test_back_at_the_root_leaves_the_browser():
+    display = FakeDisplay()
+    screen = make_ui(display)
+    screen.handle_action("home")
+
+    screen.handle_action("back")
+
+    assert not screen.in_menu
+
+
+def test_selecting_a_track_queues_its_siblings_and_plays_it():
+    display = FakeDisplay()
+    play = PlayRecorder()
+    screen = make_ui(display, play=play)
+    screen.handle_action("home")
+    screen.handle_action("select")  # Albums
+    screen.handle_action("select")  # An Album
+    screen.handle_action("down")  # second track
+
+    screen.handle_action("select")
+
+    assert play.calls == [
+        (["local:track:1", "local:track:2", "local:track:3"], "local:track:2")
+    ]
+    # Picking a track hands the screen back to now-playing.
+    assert not screen.in_menu
+
+
+def test_playback_does_not_paint_over_an_open_browser():
+    display = FakeDisplay()
+    screen = make_ui(display)
+    screen.handle_action("home")
+    shows_before = len(display.shows)
+
+    screen.render_playback(FakeTrack(), "playing", 30000, 80)
+
+    assert len(display.shows) == shows_before
+    assert screen.in_menu
+
+
+def test_browser_closes_itself_after_the_timeout(clock):
+    display = FakeDisplay()
+    screen = make_ui(display, menu_timeout=20)
+    screen.handle_action("home")
+
+    clock[0] += 21
+    screen.render_playback(FakeTrack(), "playing", 0, 80)
+
+    assert not screen.in_menu
+    # And the now-playing screen is redrawn in full over the menu.
+    assert display.shows[-1] is True
+
+
+def test_browser_stays_open_before_the_timeout(clock):
+    display = FakeDisplay()
+    screen = make_ui(display, menu_timeout=20)
+    screen.handle_action("home")
+
+    clock[0] += 10
+    screen.render_playback(FakeTrack(), "playing", 0, 80)
+
+    assert screen.in_menu
+
+
+def test_menu_timeout_zero_keeps_the_browser_open(clock):
+    display = FakeDisplay()
+    screen = make_ui(display, menu_timeout=0)
+    screen.handle_action("home")
+
+    clock[0] += 100000
+    screen.render_playback(FakeTrack(), "playing", 0, 80)
+
+    assert screen.in_menu
+
+
+def test_locked_panel_ignores_navigation():
+    display = FakeDisplay()
+    screen = make_ui(display)
+    screen.render_playback(FakeTrack(), "playing", 0, 80)
+    screen.handle_action("lock")
+
+    screen.handle_action("home")
+
+    assert not screen.in_menu
+    assert display.asleep
+
+
+def test_empty_directory_does_not_raise_on_select():
+    display = FakeDisplay()
+    screen = make_ui(display, browse=lambda uri: [])
+
+    screen.handle_action("home")
+    screen.handle_action("select")
+    screen.handle_action("down")
+
+    assert screen.in_menu
+
+
+def test_browse_failure_leaves_an_empty_menu_rather_than_raising():
+    def broken(uri):
+        raise RuntimeError("library is unavailable")
+
+    display = FakeDisplay()
+    screen = make_ui(display, browse=broken)
+
+    screen.handle_action("home")
+
+    assert screen.in_menu
+    assert screen._stack[-1]["items"] == []
