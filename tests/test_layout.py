@@ -147,3 +147,39 @@ def test_blank_is_an_empty_panel_sized_image():
     assert image.size == (layout.WIDTH, layout.HEIGHT)
     assert image.mode == "1"
     assert set(image.getdata()) == {layout.WHITE}
+
+
+def test_queue_position_renders():
+    image = layout.render(FakeTrack(), "playing", 1000, 50, number=3, total=12)
+
+    assert image.size == (layout.WIDTH, layout.HEIGHT)
+    assert image.mode == "1"
+
+
+def test_queue_position_changes_the_status_strip():
+    without = layout.render(FakeTrack(), "playing", 1000, 50)
+    with_counter = layout.render(FakeTrack(), "playing", 1000, 50, number=3, total=12)
+
+    assert without.tobytes() != with_counter.tobytes()
+
+
+def test_queue_position_renders_without_a_volume():
+    image = layout.render(FakeTrack(), "playing", 1000, None, number=3, total=12)
+
+    assert image.mode == "1"
+
+
+def test_queue_position_is_skipped_when_unknown():
+    plain = layout.render(FakeTrack(), "playing", 1000, 50)
+    no_number = layout.render(FakeTrack(), "playing", 1000, 50, number=None, total=12)
+
+    assert plain.tobytes() == no_number.tobytes()
+
+
+def test_long_duration_and_queue_position_do_not_overlap():
+    # A track over an hour gives the longest possible elapsed/total pair; the
+    # counter sits right of it and must still fit.
+    long_track = FakeTrack(length=4500000)
+    image = layout.render(long_track, "playing", 3725000, 100, number=12, total=34)
+
+    assert image.size == (layout.WIDTH, layout.HEIGHT)

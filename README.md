@@ -1,9 +1,11 @@
 # Mopidy-Epaper
 
 A [Mopidy](https://mopidy.com/) frontend extension that shows now-playing
-information — title, artist, album, progress bar, elapsed/total time, play
-state and volume — on a Waveshare 2.13" V4 e-paper display attached to a
-Raspberry Pi Zero.
+information — title, artist, album, progress, queue position and volume — on a
+Waveshare 2.13" V4 e-paper display attached to a Raspberry Pi Zero.
+
+The status strip carries the progress bar, elapsed and total time, play state,
+where the track sits in the queue, and the volume.
 
 E-paper is slow to refresh, so the extension splits updates in two: the whole
 screen is redrawn (a full, flashing refresh) only when the track changes, while
