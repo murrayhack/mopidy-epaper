@@ -104,8 +104,54 @@ The panel can also be locked, like the hold switch on an old MP3 player. A
 locked panel draws a padlock, sleeps, and ignores everything until it is
 unlocked — the frozen frame *is* the lock screen, costing nothing to display.
 
-Lock is exposed to callers rather than bound to any particular button; see the
-input API below once it lands.
+Lock is not bound to any particular button — it is exposed through the input
+API below.
+
+## Input API
+
+This extension deliberately does not talk to GPIO. It exposes an HTTP input
+API instead, so anything that can make a request can drive the panel: a button
+script, a phone, `curl`. Buttons never become a dependency, and screen
+behaviour can be built and tested before any hardware exists.
+
+It rides on the web server Mopidy already runs.
+
+```sh
+curl -X POST http://localhost:6680/epaper/input/toggle_lock
+curl -X POST http://localhost:6680/epaper/input/lock
+curl -X POST http://localhost:6680/epaper/input/unlock
+curl -X POST http://localhost:6680/epaper/input/wake
+
+curl http://localhost:6680/epaper/status
+```
+
+| Action | Status |
+| --- | --- |
+| `lock`, `unlock`, `toggle_lock` | Implemented |
+| `wake` | Implemented |
+| `up`, `down`, `select`, `back`, `home` | Accepted by the API, no behaviour yet — they arrive with library browsing |
+
+The whole vocabulary is declared up front so the contract is stable. Actions
+that do nothing yet return `501`, rather than pretending to have worked.
+Unknown actions return `400`, and `GET /epaper/` lists them.
+
+Accepted actions return `202` immediately: a full refresh takes seconds on a Pi
+Zero, and the request must not hold up Mopidy's web server while it happens.
+
+### Buttons
+
+`examples/gpio_buttons.py` is a working example that maps GPIO pins to these
+actions with `gpiozero`. It is a starting point to copy, not part of the
+package.
+
+For playback control — play/pause, next, previous, volume — use
+[mopidy-raspberry-gpio](https://github.com/pimoroni/mopidy-raspberry-gpio)
+rather than anything here. It maps pins to transport actions entirely through
+`mopidy.conf` and is a solved problem.
+
+Whatever you wire up, avoid the pins the e-paper HAT already occupies: **RST
+17, DC 25, CS 8, BUSY 24, PWR 18**, plus SPI on **10** and **11**. A collision
+there fails confusingly.
 
 ## Driving it by hand
 

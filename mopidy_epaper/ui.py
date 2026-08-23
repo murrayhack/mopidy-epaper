@@ -14,6 +14,13 @@ from . import layout
 
 logger = logging.getLogger(__name__)
 
+# The full input vocabulary. This is the API contract, so it is declared in one
+# place and stays stable; navigation lands with library browsing.
+ACTIONS = frozenset(
+    {"up", "down", "select", "back", "home", "lock", "unlock", "toggle_lock", "wake"}
+)
+IMPLEMENTED_ACTIONS = frozenset({"lock", "unlock", "toggle_lock", "wake"})
+
 
 def content_key(track):
     """Identify what the non-status part of the screen shows.
@@ -82,6 +89,19 @@ class Ui:
                     return
 
             self._draw_playback(track, state, position_ms, volume)
+
+    def handle_action(self, action):
+        """Apply an input action. Unknown ones are rejected before they reach here."""
+        if action == "lock":
+            self.lock()
+        elif action == "unlock":
+            self.unlock()
+        elif action == "toggle_lock":
+            self.unlock() if self.locked else self.lock()
+        elif action == "wake":
+            self.wake()
+        else:
+            logger.debug("Ignoring action with no behaviour yet: %s", action)
 
     def lock(self):
         """Freeze the panel on its current frame and power the controller down.

@@ -284,3 +284,81 @@ def test_unlocking_an_idle_asleep_panel_resumes_drawing(clock):
     # Still stopped, but the idle timer restarted, so it must draw rather than
     # stay stuck behind the asleep flag.
     assert len(display.shows) == shows_before + 1
+
+
+def test_toggle_lock_locks_an_unlocked_panel():
+    display = FakeDisplay()
+    screen = make_ui(display)
+    screen.render_playback(FakeTrack(), "playing", 0, 80)
+
+    screen.handle_action("toggle_lock")
+
+    assert screen.locked
+    assert display.asleep
+
+
+def test_toggle_lock_unlocks_a_locked_panel():
+    display = FakeDisplay()
+    screen = make_ui(display)
+    screen.render_playback(FakeTrack(), "playing", 0, 80)
+    screen.handle_action("toggle_lock")
+
+    screen.handle_action("toggle_lock")
+
+    assert not screen.locked
+    assert display.wakes == 1
+
+
+def test_lock_and_unlock_actions_dispatch():
+    display = FakeDisplay()
+    screen = make_ui(display)
+    screen.render_playback(FakeTrack(), "playing", 0, 80)
+
+    screen.handle_action("lock")
+    assert screen.locked
+
+    screen.handle_action("unlock")
+    assert not screen.locked
+
+
+def test_wake_action_wakes_an_idle_panel(clock):
+    display = FakeDisplay()
+    screen = make_ui(display, sleep_after=60)
+    track = FakeTrack()
+    screen.render_playback(track, "stopped", 0, 80)
+    clock[0] += 61
+    screen.render_playback(track, "stopped", 0, 80)
+    assert display.asleep
+
+    screen.handle_action("wake")
+
+    assert display.wakes == 1
+    assert not display.asleep
+
+
+def test_wake_action_does_nothing_while_locked():
+    display = FakeDisplay()
+    screen = make_ui(display)
+    screen.render_playback(FakeTrack(), "playing", 0, 80)
+    screen.handle_action("lock")
+
+    screen.handle_action("wake")
+
+    assert display.asleep
+    assert display.wakes == 0
+
+
+def test_unimplemented_actions_are_ignored_without_raising():
+    display = FakeDisplay()
+    screen = make_ui(display)
+    screen.render_playback(FakeTrack(), "playing", 0, 80)
+    shows_before = len(display.shows)
+
+    for action in ("up", "down", "select", "back", "home"):
+        screen.handle_action(action)
+
+    assert len(display.shows) == shows_before
+
+
+def test_implemented_actions_are_a_subset_of_the_vocabulary():
+    assert ui.IMPLEMENTED_ACTIONS <= ui.ACTIONS
