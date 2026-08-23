@@ -308,6 +308,10 @@ only.
   ([writeup](https://hackaday.io/project/196631-epipod)) — a standalone Pi Zero
   2 W music player using the same panel; used as a hardware reference.
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
