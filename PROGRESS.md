@@ -154,10 +154,20 @@ lock/unlock/toggle_lock/wake do anything, so the contract stays stable
 when browsing lands. `examples/gpio_buttons.py` shows the intended
 consumer.
 
-**Not yet run on hardware.** The specific unknowns are whether Mopidy
-mounts the routes where expected, and whether
-`pykka.ActorRegistry.get_by_class()` resolves the frontend from the
-Tornado thread.
+**Verified on hardware 2026-08-23.** Both unknowns resolved: Mopidy mounts
+the routes at `/epaper/`, and `pykka.ActorRegistry.get_by_class()` does
+resolve the frontend from the Tornado thread.
+
+- `GET /epaper/` lists the vocabulary.
+- `toggle_lock` draws the padlock on the panel and sleeps it; toggling
+  again wakes it.
+- `POST /epaper/input/up` returns `501`.
+- `GET /epaper/status` returned `{"locked": false, "asleep": true,
+  "running": true}` after an unlock followed by an idle timeout — the
+  phase 1 sleep logic and the phase 2 API agreeing.
+
+This also closes the one loose end from phase 1: no spurious wake was
+observed after the panel slept, so the read-then-render race fix holds.
 
 ## Known limitations / deferred
 
