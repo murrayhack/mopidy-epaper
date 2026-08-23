@@ -44,4 +44,4 @@ filterwarnings = [
 packages = ["mopidy_epaper", "mopidy_epaper.drivers"]
 
 [tool.setuptools.package-data]
-mopidy_epaper = ["ext.conf"]
+mopidy_epaper = ["ext.conf", "webremote.html"]

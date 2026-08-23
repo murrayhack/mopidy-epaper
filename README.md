@@ -82,6 +82,7 @@ full_refresh_every = 60
 sleep_after = 300
 idle_screen = keep
 menu_timeout = 20
+web_remote = true
 dummy_output_path =
 ```
 
@@ -93,6 +94,7 @@ dummy_output_path =
 | `sleep_after` | Seconds of stopped playback before the panel is put to sleep. `0` disables it. |
 | `idle_screen` | `keep` leaves the last frame on the panel when it sleeps, `blank` clears it first. |
 | `menu_timeout` | Seconds without input before the library browser closes itself. `0` keeps it open. |
+| `web_remote` | Serve the remote page at `/epaper/`. `false` serves the JSON action listing there instead. |
 | `dummy_output_path` | Where the `dummy` driver writes its PNG. Defaults to `/tmp/mopidy-epaper.png`. |
 
 Confirm the extension is loaded with `mopidy deps list`.
@@ -201,6 +203,25 @@ refresh that clears ghosting still applies.
 
 If a library category shows **Empty**, that is not a display fault: it means
 mopidy-local has nothing indexed. Run `mopidy local scan`.
+
+### Web remote
+
+`http://<pi>:6680/epaper/` serves a small remote — the same five navigation
+buttons plus lock, wake, shuffle and repeat — so the panel can be driven from a
+phone without a terminal or any hardware. It also shows whether the panel is
+locked, asleep, or in the menu.
+
+It is the practical way to judge the browsing experience: tapping through a
+menu at real speed feels nothing like sending one `curl` at a time.
+
+Set `web_remote = false` to serve the JSON action listing at that URL instead.
+The input API itself is unaffected either way, and `GET /epaper/actions` always
+returns the vocabulary.
+
+> **Reaching it from a phone is a Mopidy-wide decision, not this setting.**
+> Mopidy binds to `127.0.0.1` by default, so the remote is localhost-only.
+> Changing `[http] hostname` to expose it puts *all* of Mopidy's API on your
+> network, not just this page.
 
 ### Buttons
 

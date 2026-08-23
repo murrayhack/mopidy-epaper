@@ -21,6 +21,7 @@ class Extension(ext.Extension):
         schema["sleep_after"] = config.Integer(minimum=0)
         schema["idle_screen"] = config.String(choices=["keep", "blank"])
         schema["menu_timeout"] = config.Integer(minimum=0)
+        schema["web_remote"] = config.Boolean()
         schema["dummy_output_path"] = config.Path(optional=True)
         return schema
 
