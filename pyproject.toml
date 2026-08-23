@@ -30,6 +30,16 @@ test = [
 [project.entry-points."mopidy.ext"]
 epaper = "mopidy_epaper:Extension"
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+    # Mopidy 3.4.2 imports pkg_resources at its own module top level, so this
+    # fires on any test that imports mopidy. Not ours to fix, and it drowns out
+    # warnings that are. Matched narrowly rather than ignoring DeprecationWarning
+    # wholesale, so our own deprecations still surface.
+    "ignore:pkg_resources is deprecated as an API:DeprecationWarning",
+]
+
 [tool.setuptools]
 packages = ["mopidy_epaper", "mopidy_epaper.drivers"]
 
