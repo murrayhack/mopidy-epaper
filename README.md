@@ -107,6 +107,45 @@ unlocked — the frozen frame *is* the lock screen, costing nothing to display.
 Lock is exposed to callers rather than bound to any particular button; see the
 input API below once it lands.
 
+## Driving it by hand
+
+Mopidy's JSON-RPC API over HTTP is the quickest way to exercise the display
+without a web client. Queue the first file in `~/music` and play it:
+
+```sh
+F=$(python3 -c "import pathlib; print(sorted((pathlib.Path.home()/'music').iterdir())[0].as_uri())")
+
+curl -s -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"core.tracklist.add\",\"params\":{\"uris\":[\"$F\"]}}" \
+  -H 'Content-Type: application/json' http://localhost:6680/mopidy/rpc
+
+curl -s -d '{"jsonrpc":"2.0","id":1,"method":"core.playback.play"}' \
+  -H 'Content-Type: application/json' http://localhost:6680/mopidy/rpc
+```
+
+Deriving the URI through `pathlib` matters: filenames with spaces need
+percent-encoding, and a raw `file://$F` will silently resolve to nothing and
+return an empty `result`.
+
+Stop, and clear the queue between runs:
+
+```sh
+curl -s -d '{"jsonrpc":"2.0","id":1,"method":"core.playback.stop"}' \
+  -H 'Content-Type: application/json' http://localhost:6680/mopidy/rpc
+
+curl -s -d '{"jsonrpc":"2.0","id":1,"method":"core.tracklist.clear"}' \
+  -H 'Content-Type: application/json' http://localhost:6680/mopidy/rpc
+```
+
+### Testing sleep and wake
+
+Set `sleep_after = 20` so you are not waiting five minutes, then play, stop,
+and wait. Mopidy logs each transition at info level — `Panel idle for 20s,
+sleeping`, then `Panel awake` when playback resumes.
+
+If it does not flash on wake, the log tells you which of two things happened;
+so does the panel. If the display carries on updating, it simply never slept.
+If it stays frozen, it slept and the SPI re-init failed.
+
 ## Development
 
 `mopidy_epaper/layout.py` holds all the rendering and imports neither Mopidy

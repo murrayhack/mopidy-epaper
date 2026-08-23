@@ -131,7 +131,7 @@ class Ui:
         self._display.sleep()
         self._idle_asleep = True
         self._base_image = None
-        logger.debug("Panel asleep after %ss stopped", self._sleep_after)
+        logger.info("Panel idle for %ss, sleeping", self._sleep_after)
 
     def _draw_playback(self, track, state, position_ms, volume):
         content = content_key(track)

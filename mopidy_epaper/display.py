@@ -78,11 +78,11 @@ class EpaperDisplay:
             # partial refreshes diff against.
             self._needs_full = True
             if self._epd is None:
-                logger.debug("Dummy panel asleep")
+                logger.info("Dummy panel asleep")
                 return
             try:
                 self._epd.sleep()
-                logger.debug("Panel asleep")
+                logger.info("Panel asleep")
             except Exception:
                 logger.exception("Failed to put the e-paper display to sleep")
 
@@ -101,7 +101,7 @@ class EpaperDisplay:
         # module_exit() leaves the gpiozero pin objects open, so they survive
         # the round trip.
         self._epd.init()
-        logger.debug("Panel awake")
+        logger.info("Panel awake")
 
     def _show_full(self, image):
         if self._epd is None:
