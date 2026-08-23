@@ -127,9 +127,6 @@ class FakePlayer:
     def queue(self):
         return self._queue
 
-    def position(self):
-        return (1, len(self._queue)) if self._queue else (None, 0)
-
     def play_queued(self, tlid):
         self.played_tlids.append(tlid)
 
@@ -1033,3 +1030,51 @@ def test_flush_does_not_draw_over_a_locked_panel():
 
     assert len(display.shows) == shows
     assert display.asleep
+
+
+def test_an_active_panel_is_not_dormant():
+    screen = make_ui(FakeDisplay())
+    render_playback(screen, FakeTrack(), "playing", 0, 80)
+
+    assert not screen.dormant
+
+
+def test_a_locked_panel_is_dormant():
+    screen = make_ui(FakeDisplay())
+    render_playback(screen, FakeTrack(), "playing", 0, 80)
+
+    screen.handle_action("lock")
+
+    assert screen.dormant
+
+
+def test_an_idle_asleep_panel_is_dormant(clock):
+    screen = make_ui(FakeDisplay(), sleep_after=60)
+    track = FakeTrack()
+    render_playback(screen, track, "stopped", 0, 80)
+    clock[0] += 61
+    render_playback(screen, track, "stopped", 0, 80)
+
+    assert screen.dormant
+
+
+def test_a_stopped_but_awake_panel_is_not_dormant(clock):
+    screen = make_ui(FakeDisplay(), sleep_after=60)
+
+    render_playback(screen, FakeTrack(), "stopped", 0, 80)
+
+    # The idle timer still needs ticks until it actually sleeps.
+    assert not screen.dormant
+
+
+def test_waking_clears_dormancy(clock):
+    screen = make_ui(FakeDisplay(), sleep_after=60)
+    track = FakeTrack()
+    render_playback(screen, track, "stopped", 0, 80)
+    clock[0] += 61
+    render_playback(screen, track, "stopped", 0, 80)
+    assert screen.dormant
+
+    screen.handle_action("wake")
+
+    assert not screen.dormant
