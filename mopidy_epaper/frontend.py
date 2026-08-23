@@ -17,6 +17,61 @@ from .ui import Ui
 logger = logging.getLogger(__name__)
 
 
+class MopidyPlayer:
+    """Everything the UI needs from Mopidy, behind one small surface.
+
+    Injected into :class:`~mopidy_epaper.ui.Ui` rather than imported by it, so
+    the screen state machine stays testable without a running Mopidy.
+    """
+
+    def __init__(self, core):
+        self._core = core
+
+    def browse(self, uri):
+        """Library contents. ``None`` is the root."""
+        return self._core.library.browse(uri).get()
+
+    def play(self, uris, start_uri):
+        """Replace the queue with ``uris`` and start at ``start_uri``."""
+        self._core.tracklist.clear().get()
+        self._core.tracklist.add(uris=uris).get()
+        # Match on URI rather than index: add() silently drops anything it
+        # cannot resolve, so positions do not necessarily line up.
+        target = self._find_tlid(start_uri)
+        if target is not None:
+            self._core.playback.play(tlid=target).get()
+        else:
+            self._core.playback.play().get()
+
+    def _find_tlid(self, uri):
+        for tl_track in self._core.tracklist.get_tl_tracks().get():
+            if tl_track.track.uri == uri:
+                return tl_track.tlid
+        return None
+
+    def queue(self):
+        return self._core.tracklist.get_tl_tracks().get()
+
+    def play_queued(self, tlid):
+        self._core.playback.play(tlid=tlid).get()
+
+    def options(self):
+        repeat = self._core.tracklist.get_repeat().get()
+        single = self._core.tracklist.get_single().get()
+        return {
+            "shuffle": self._core.tracklist.get_random().get(),
+            # Mopidy spells repeat-one as repeat plus single.
+            "repeat": ("one" if single else "all") if repeat else "off",
+        }
+
+    def set_option(self, name, value):
+        if name == "shuffle":
+            self._core.tracklist.set_random(bool(value)).get()
+        elif name == "repeat":
+            self._core.tracklist.set_repeat(value != "off").get()
+            self._core.tracklist.set_single(value == "one").get()
+
+
 class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
     def __init__(self, config, core):
         super().__init__()
@@ -38,7 +93,7 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
             self.stop()
             return
 
-        self.ui = Ui(self.config, self.display, browse=self._browse, play=self._play)
+        self.ui = Ui(self.config, self.display, player=MopidyPlayer(self.core))
         self._refresh()
         self._ticker = threading.Thread(
             target=self._tick_loop, name="EpaperTicker", daemon=True
@@ -105,23 +160,6 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
         # rather than waiting for the next tick.
         if not self.ui.locked and not self.ui.in_menu:
             self._refresh()
-
-    def _browse(self, uri):
-        """Library contents for the browser. ``None`` is the root."""
-        return self.core.library.browse(uri).get()
-
-    def _play(self, uris, start_uri):
-        """Replace the queue with ``uris`` and start at ``start_uri``."""
-        self.core.tracklist.clear().get()
-        self.core.tracklist.add(uris=uris).get()
-        # Match on URI rather than index: add() silently drops anything it
-        # cannot resolve, so positions do not necessarily line up.
-        tl_tracks = self.core.tracklist.get_tl_tracks().get()
-        target = next((t for t in tl_tracks if t.track.uri == start_uri), None)
-        if target is not None:
-            self.core.playback.play(tlid=target.tlid).get()
-        else:
-            self.core.playback.play().get()
 
     def input_state(self):
         if self.ui is None or self.display is None:

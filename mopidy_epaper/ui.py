@@ -20,15 +20,52 @@ logger = logging.getLogger(__name__)
 # The full input vocabulary. This is the API contract, so it is declared in one
 # place and stays stable.
 ACTIONS = frozenset(
-    {"up", "down", "select", "back", "home", "lock", "unlock", "toggle_lock", "wake"}
+    {
+        "up",
+        "down",
+        "select",
+        "back",
+        "home",
+        "lock",
+        "unlock",
+        "toggle_lock",
+        "wake",
+        "toggle_shuffle",
+        "toggle_repeat",
+    }
 )
 IMPLEMENTED_ACTIONS = ACTIONS
 
 _PANEL_ACTIONS = frozenset({"lock", "unlock", "toggle_lock", "wake"})
-# Pressing any of these from the now-playing screen opens the browser.
+_OPTION_ACTIONS = frozenset({"toggle_shuffle", "toggle_repeat"})
+# Pressing any of these from the now-playing screen opens the menu.
 _OPENS_MENU = frozenset({"up", "down", "select", "home"})
 
-ROOT_TITLE = "Library"
+ROOT_TITLE = "Menu"
+LIBRARY_TITLE = "Library"
+QUEUE_TITLE = "Queue"
+
+#: Repeat cycles through these in order.
+REPEAT_STATES = ("off", "all", "one")
+
+_ROOT_LIBRARY = 0
+_ROOT_QUEUE = 1
+
+
+class Entry:
+    """A menu row that is not a library ``Ref``.
+
+    Duck-types the same attributes ``menu.render`` reads from a ``Ref``, plus
+    ``value`` for settings rows and ``action`` for what selecting it does.
+    """
+
+    def __init__(self, name, type, action, value=None, uri=None, tlid=None):
+        self.name = name
+        self.type = type
+        self.action = action
+        self.value = value
+        self.uri = uri
+        self.tlid = tlid
 
 
 def content_key(track):
@@ -50,13 +87,19 @@ def status_key(state, position_ms, volume):
 
 
 class Ui:
-    def __init__(self, config, display, browse=None, play=None):
+    def __init__(self, config, display, player=None):
+        """``player`` supplies everything that needs Mopidy.
+
+        It is injected rather than imported so this whole state machine stays
+        testable without a running Mopidy. See ``frontend.MopidyPlayer`` for
+        the expected surface: ``browse``, ``play``, ``queue``, ``play_queued``,
+        ``options`` and ``set_option``.
+        """
         self._display = display
         self._sleep_after = config["sleep_after"]
         self._idle_screen = config["idle_screen"]
         self._menu_timeout = config.get("menu_timeout", 20)
-        self._browse = browse
-        self._play = play
+        self._player = player
 
         self._lock = threading.RLock()
         self._locked = False
@@ -128,6 +171,10 @@ class Ui:
 
             if action in _PANEL_ACTIONS:
                 self._handle_panel_action(action)
+                return
+
+            if action in _OPTION_ACTIONS:
+                self._toggle_option(action)
                 return
 
             if not self._stack:
@@ -217,8 +264,8 @@ class Ui:
 
     def _enter_menu(self):
         self._stack = []
-        self._open(None, ROOT_TITLE)
-        logger.debug("Entered the library browser")
+        self._open_root()
+        logger.debug("Entered the menu")
 
     def _leave_menu(self):
         if not self._stack:
@@ -227,23 +274,133 @@ class Ui:
         # The menu screen is not a valid base for a partial refresh of the
         # now-playing screen, so force a full redraw of it.
         self._base_image = None
-        logger.debug("Left the library browser")
+        logger.debug("Left the menu")
 
-    def _open(self, uri, title):
+    # -- root -------------------------------------------------------------
+
+    def _open_root(self):
+        # The menu is always the same shape; only the cursor moves. It lands on
+        # the queue while something is playing and the library otherwise, which
+        # is usually what was wanted without making the button unpredictable.
+        selected = _ROOT_QUEUE if self._is_playing() else _ROOT_LIBRARY
+        self._push("root", ROOT_TITLE, self._root_items(), selected=selected)
+
+    def _root_items(self):
+        options = self._options()
+        repeat = str(options.get("repeat", "off")).capitalize()
+        return [
+            Entry(LIBRARY_TITLE, "directory", "library"),
+            Entry(QUEUE_TITLE, "directory", "queue"),
+            Entry("Shuffle", "toggle", "shuffle", value="On" if options.get("shuffle") else "Off"),
+            Entry("Repeat", "toggle", "repeat", value=repeat),
+        ]
+
+    def _is_playing(self):
+        if self._last_playback is None:
+            return False
+        return layout._state_name(self._last_playback[1]) == "playing"
+
+    def _options(self):
+        if self._player is None:
+            return {"shuffle": False, "repeat": "off"}
         try:
-            items = list(self._browse(uri)) if self._browse else []
+            return self._player.options()
+        except Exception:
+            logger.exception("Could not read playback options")
+            return {"shuffle": False, "repeat": "off"}
+
+    def _set_option(self, name, value):
+        if self._player is not None:
+            try:
+                self._player.set_option(name, value)
+            except Exception:
+                logger.exception("Could not set %s to %r", name, value)
+                return
+        # The row displays the value, so it has to be rebuilt where it shows.
+        if self._stack and self._stack[-1]["kind"] == "root":
+            self._stack[-1]["items"] = self._root_items()
+            self._draw_menu()
+
+    def _toggle_option(self, action):
+        options = self._options()
+        if action == "toggle_shuffle":
+            self._set_option("shuffle", not options.get("shuffle", False))
+            return
+        current = options.get("repeat", "off")
+        index = REPEAT_STATES.index(current) if current in REPEAT_STATES else 0
+        self._set_option("repeat", REPEAT_STATES[(index + 1) % len(REPEAT_STATES)])
+
+    # -- library and queue ------------------------------------------------
+
+    def _open_library(self, uri, title):
+        self._push("library", title, self._browse_items(uri), uri=uri)
+
+    def _browse_items(self, uri):
+        if self._player is None:
+            return []
+        try:
+            return list(self._player.browse(uri))
         except Exception:
             logger.exception("Could not browse %s", uri)
-            items = []
-        self._stack.append({"uri": uri, "title": title, "items": items, "selected": 0, "offset": 0})
+            return []
+
+    def _open_queue(self):
+        self._push("queue", QUEUE_TITLE, self._queue_items())
+
+    def _queue_items(self):
+        if self._player is None:
+            return []
+        try:
+            queued = self._player.queue()
+        except Exception:
+            logger.exception("Could not read the queue")
+            return []
+        entries = []
+        for tl_track in queued:
+            track = getattr(tl_track, "track", None)
+            entries.append(
+                Entry(
+                    getattr(track, "name", None) or "?",
+                    "track",
+                    "queued",
+                    tlid=getattr(tl_track, "tlid", None),
+                )
+            )
+        return entries
+
+    # -- navigation -------------------------------------------------------
+
+    def _push(self, kind, title, items, uri=None, selected=0):
+        self._stack.append(
+            {
+                "kind": kind,
+                "title": title,
+                "items": items,
+                "uri": uri,
+                "selected": selected,
+                "offset": menu.scroll_offset(len(items), selected, 0),
+            }
+        )
         self._draw_menu()
 
     def _back(self):
         if len(self._stack) > 1:
             self._stack.pop()
+            self._reload_frame()
             self._draw_menu()
         else:
             self._leave_menu()
+
+    def _reload_frame(self):
+        """Re-read a frame that may have gone stale while we were deeper in."""
+        frame = self._stack[-1]
+        if frame["kind"] == "root":
+            frame["items"] = self._root_items()
+        elif frame["kind"] == "queue":
+            frame["items"] = self._queue_items()
+        count = len(frame["items"])
+        frame["selected"] = min(frame["selected"], max(0, count - 1))
+        frame["offset"] = menu.scroll_offset(count, frame["selected"], frame["offset"])
 
     def _move(self, delta):
         frame = self._stack[-1]
@@ -262,17 +419,44 @@ class Ui:
             return
         item = items[frame["selected"]]
 
-        if menu.is_directory(item):
-            self._open(item.uri, getattr(item, "name", None) or ROOT_TITLE)
-            return
+        if frame["kind"] == "root":
+            self._select_root(item)
+        elif frame["kind"] == "queue":
+            self._select_queued(item)
+        else:
+            self._select_library(item, items)
 
-        if self._play is None:
+    def _select_root(self, item):
+        if item.action == "library":
+            self._open_library(None, LIBRARY_TITLE)
+        elif item.action == "queue":
+            self._open_queue()
+        elif item.action == "shuffle":
+            self._toggle_option("toggle_shuffle")
+        elif item.action == "repeat":
+            self._toggle_option("toggle_repeat")
+
+    def _select_queued(self, item):
+        if self._player is None or item.tlid is None:
+            return
+        try:
+            self._player.play_queued(item.tlid)
+        except Exception:
+            logger.exception("Could not play queued track %s", item.tlid)
+            return
+        self._leave_menu()
+
+    def _select_library(self, item, items):
+        if menu.is_directory(item):
+            self._open_library(item.uri, getattr(item, "name", None) or LIBRARY_TITLE)
+            return
+        if self._player is None:
             return
         # Queue every track alongside it, so picking one song out of an album
         # plays the album rather than stopping at the end of that track.
         uris = [i.uri for i in items if not menu.is_directory(i)]
         try:
-            self._play(uris, item.uri)
+            self._player.play(uris, item.uri)
         except Exception:
             logger.exception("Could not play %s", item.uri)
             return

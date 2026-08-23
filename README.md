@@ -129,34 +129,56 @@ curl http://localhost:6680/epaper/status
 
 | Action | Effect |
 | --- | --- |
-| `up`, `down` | Move the browser selection, wrapping at either end |
-| `select` | Descend into a directory, or play a track |
-| `back` | Up one level, or leave the browser at the root |
-| `home` | Open the browser at the library root, or close it |
+| `up`, `down` | Move the selection, wrapping at either end |
+| `select` | Descend, play a track, or flip a setting |
+| `back` | Up one level, or leave the menu at the root |
+| `home` | Open the menu, or close it |
+| `toggle_shuffle`, `toggle_repeat` | Change playback options without opening the menu |
 | `lock`, `unlock`, `toggle_lock` | Freeze the panel and sleep it |
 | `wake` | Wake an idle panel |
 
 From the now-playing screen, any of `up`, `down`, `select` or `home` opens the
-browser. Unknown actions return `400`, and `GET /epaper/` lists the vocabulary.
+menu. Unknown actions return `400`, and `GET /epaper/` lists the vocabulary.
 
 Accepted actions return `202` immediately: a full refresh takes seconds on a Pi
 Zero, and the request must not hold up Mopidy's web server while it happens.
 
-## Browsing the library
+## The menu
 
-`home` (or any navigation action) opens a browser over Mopidy's library. It is
-the same tree `core.library.browse()` exposes, so whatever backends are enabled
-show up in it.
+`home` — or any navigation action — opens the menu:
 
-Selecting a track queues every track listed alongside it and starts at the one
-picked, so choosing a song from an album plays the album rather than stopping
-after one track.
+```
+Menu                  2/4
+-------------------------
+  Library            >
+ [Queue              >]
+  Shuffle:         Off
+  Repeat:          Off
+```
 
-The browser closes itself after `menu_timeout` seconds without input and hands
-the screen back to now-playing. Set it to `0` to keep it open until dismissed.
+The menu always has this shape. Only the cursor moves: it starts on **Queue**
+while something is playing and on **Library** otherwise, so the common case is
+one press away without the same button leading somewhere different each time.
+
+**Library** browses the tree `core.library.browse()` exposes, so whatever
+backends are enabled show up in it. Selecting a track queues every track listed
+alongside it and starts at the one picked, so choosing a song from an album
+plays the album rather than stopping after one track.
+
+**Queue** lists the current tracklist; selecting a row jumps straight to it.
+
+**Shuffle** and **Repeat** flip in place rather than navigating anywhere.
+Repeat cycles `Off` → `All` → `One`, which is Mopidy's `repeat` and `single`
+options underneath.
+
+The menu closes itself after `menu_timeout` seconds without input and hands the
+screen back to now-playing. Set it to `0` to keep it open until dismissed.
 
 Scrolling uses partial refreshes, so it does not flash — the periodic full
 refresh that clears ghosting still applies.
+
+If a library category shows **Empty**, that is not a display fault: it means
+mopidy-local has nothing indexed. Run `mopidy local scan`.
 
 ### Buttons
 

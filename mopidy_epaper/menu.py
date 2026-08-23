@@ -23,9 +23,13 @@ ROW_HEIGHT = 19
 ROWS = (HEIGHT - HEADER_HEIGHT) // ROW_HEIGHT
 
 
+#: Row types that are acted on in place rather than descended into.
+LEAF_TYPES = ("track", "toggle")
+
+
 def is_directory(item):
-    """Anything that is not a track can be descended into."""
-    return getattr(item, "type", None) != "track"
+    """Whether a row leads somewhere rather than doing something."""
+    return getattr(item, "type", None) not in LEAF_TYPES
 
 
 def scroll_offset(count, selected, previous=0, rows=ROWS):
@@ -85,13 +89,21 @@ def _draw_row(draw, font, item, row, selected):
         draw.rectangle((0, top, WIDTH, top + ROW_HEIGHT - 1), fill=BLACK)
     ink = WHITE if selected else BLACK
 
-    arrow_room = 12 if is_directory(item) else 0
-    label = getattr(item, "name", None) or "?"
-    label = _truncate(draw, label, font, WIDTH - 2 * MARGIN - arrow_room)
-    draw.text((MARGIN, top + 2), label, font=font, fill=ink)
-
-    if is_directory(item):
+    # A row shows either a value (a setting) or an arrow (somewhere to go).
+    value = getattr(item, "value", None)
+    if value:
+        value_width = draw.textlength(value, font=font)
+        draw.text((WIDTH - MARGIN - value_width, top + 2), value, font=font, fill=ink)
+        reserved = value_width + 8
+    elif is_directory(item):
         _draw_arrow(draw, WIDTH - MARGIN - 6, top + ROW_HEIGHT // 2, ink)
+        reserved = 12
+    else:
+        reserved = 0
+
+    label = getattr(item, "name", None) or "?"
+    label = _truncate(draw, label, font, WIDTH - 2 * MARGIN - reserved)
+    draw.text((MARGIN, top + 2), label, font=font, fill=ink)
 
 
 def _draw_arrow(draw, x, y, ink, size=5):

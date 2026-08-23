@@ -203,6 +203,32 @@ empty mopidy-local library, not a display fault. `mopidy local scan` has
 to have actually indexed something. The browser renders "Empty" perfectly
 correctly in that case, which reads like a bug and is not one.
 
+## Player menu, queue view and playback options (2026-08-23, unverified)
+
+`home` now opens a fixed root menu — Library, Queue, Shuffle, Repeat —
+rather than dropping straight into the library.
+
+The design question was whether `home` should be context-sensitive:
+a player screen while playing, the library when idle. It is not. The same
+button leading somewhere different depending on state breaks muscle
+memory, which matters when there are five buttons and no preview of what
+a press will do. Instead the menu always has the same shape and only the
+**cursor** moves: Queue while playing, Library otherwise. Same
+convenience, no unpredictability.
+
+- Queue view lists the tracklist; selecting a row jumps to it.
+- Shuffle and Repeat flip in place rather than navigating. Repeat cycles
+  off/all/one, which is Mopidy's `repeat` plus `single`.
+- `toggle_shuffle` and `toggle_repeat` were added to the input API too, so
+  a dedicated button need not go through the menu.
+- Everything Mopidy-shaped now sits behind `frontend.MopidyPlayer`, one
+  injected adapter, instead of loose callables passed to `Ui`. The state
+  machine still imports no Mopidy.
+
+**Not yet run on hardware.** Worth checking that the values on the
+Shuffle and Repeat rows are legible right-aligned at this font size, and
+that toggling redraws the row without a distracting full-screen flash.
+
 ## Known limitations / deferred
 
 - **Radio stream titles don't update.** For a stream, the track URI and
