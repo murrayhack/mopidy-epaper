@@ -349,6 +349,42 @@ milliseconds and no setting changes that.
 **Verified on hardware 2026-08-23.** The interface feels markedly better
 with coalescing on; the web remote renders and drives the panel.
 
+## Performance pass (2026-08-23, unverified)
+
+Three things, none of which change behaviour.
+
+**Seven sequential round trips became one.** `_refresh` read track,
+state, position, volume, mute and queue position with a `.get()` after
+each call, so every request waited for a full round trip to the core
+actor before the next was even sent. Proxy calls return futures
+immediately, so `MopidyPlayer.snapshot()` now sends all seven and then
+waits. They queue on the same actor regardless; waiting between sends was
+pure added latency.
+
+**Dormant ticks cost nothing.** While stopped and asleep, the ticker did
+all seven reads every `update_interval` and then `render_playback`
+returned immediately at the `_idle_asleep` guard. Forever. `Ui.dormant`
+now says when a tick cannot achieve anything — locked, or idle-asleep —
+and the ticker skips. Playback events wake the panel directly, so nothing
+is missed.
+
+**Rendering left the actor thread entirely.** Menu draws already had;
+playback draws had not, so a track change still blocked the actor for the
+couple of seconds a full refresh takes, and Mopidy's events queued behind
+the SPI bus. Events and ticks now mark playback dirty and the render
+thread does the reading and drawing.
+
+That last one also collapses an event storm: a track change fires
+`track_playback_started` and `playback_state_changed`, which each used to
+mean a full read and draw. Now it is one of each.
+
+The `_refresh_lock` is gone with it. Reading and rendering are atomic
+because one thread does both, rather than because a lock says so.
+
+**Verified on hardware 2026-08-24** as behaviour-preserving, which was
+the whole intent. Not benchmarked — the wins are structural and were
+reasoned rather than measured.
+
 ## Backlog
 
 Discussed and worth doing, not yet built:

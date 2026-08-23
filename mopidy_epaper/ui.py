@@ -103,8 +103,12 @@ class Ui:
 
         It is injected rather than imported so this whole state machine stays
         testable without a running Mopidy. See ``frontend.MopidyPlayer`` for
-        the expected surface: ``browse``, ``play``, ``queue``, ``play_queued``,
-        ``options`` and ``set_option``.
+        the expected surface: ``browse``, ``play``, ``playlists``,
+        ``playlist_tracks``, ``queue``, ``play_queued``, ``options`` and
+        ``set_option``.
+
+        ``on_dirty`` defers menu drawing to whoever supplies it. Without it the
+        menu draws inline.
         """
         self._display = display
         # Without a notifier the menu draws inline, which is what the tests
@@ -134,6 +138,17 @@ class Ui:
     def locked(self):
         with self._lock:
             return self._locked
+
+    @property
+    def dormant(self):
+        """True when a tick would achieve nothing.
+
+        A locked or idle-asleep panel ignores playback updates, and playback
+        events wake it directly, so there is no reason to keep reading state
+        for it.
+        """
+        with self._lock:
+            return self._locked or self._idle_asleep
 
     @property
     def in_menu(self):

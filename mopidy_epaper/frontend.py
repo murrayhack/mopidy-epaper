@@ -62,11 +62,33 @@ class MopidyPlayer:
     def queue(self):
         return self._core.tracklist.get_tl_tracks().get()
 
-    def position(self):
-        """Where the current track sits in the queue, as 1-based ``(n, total)``."""
-        index = self._core.tracklist.index().get()
-        total = self._core.tracklist.get_length().get()
-        return (None if index is None else index + 1, total)
+    def snapshot(self):
+        """Everything the now-playing screen needs, in one round trip.
+
+        Each proxy call returns a future immediately, so every request is sent
+        before any is waited on. They queue on the same core actor either way;
+        waiting between sends only adds a round trip each time.
+        """
+        track = self._core.playback.get_current_track()
+        state = self._core.playback.get_state()
+        # Read the real position every time rather than extrapolating, so the
+        # progress bar cannot drift.
+        position = self._core.playback.get_time_position()
+        volume = self._core.mixer.get_volume()
+        muted = self._core.mixer.get_mute()
+        index = self._core.tracklist.index()
+        total = self._core.tracklist.get_length()
+
+        number = index.get()
+        return Playback(
+            track=track.get(),
+            state=state.get(),
+            position_ms=position.get(),
+            volume=volume.get(),
+            number=None if number is None else number + 1,
+            total=total.get(),
+            muted=muted.get(),
+        )
 
     def play_queued(self, tlid):
         self._core.playback.play(tlid=tlid).get()
@@ -100,8 +122,7 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
         self._ticker = None
         self._renderer = None
         self._render_wanted = threading.Event()
-        # Reading playback state and rendering it must be atomic; see _refresh.
-        self._refresh_lock = threading.Lock()
+        self._playback_dirty = threading.Event()
 
     def on_start(self):
         try:
@@ -139,12 +160,16 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
         """Tick regardless of playback state.
 
         The UI needs a heartbeat even while stopped, otherwise nothing drives
-        the idle-sleep timer. It skips redundant redraws itself.
+        the idle-sleep timer. Once the panel is asleep or locked there is
+        nothing a tick can do, and playback events wake it, so the tick stops
+        costing anything until then.
         """
         interval = self.config["update_interval"]
         while not self._stop_event.wait(interval):
             try:
-                self._refresh()
+                if self.ui.dormant:
+                    continue
+                self._invalidate_playback()
             except Exception:
                 logger.exception("e-paper tick failed")
 
@@ -158,52 +183,47 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
         """
         coalesce = self.config["input_coalesce_ms"] / 1000
         while not self._stop_event.is_set():
-            if not self._render_wanted.wait(timeout=1):
+            if not self._render_wanted.wait(timeout=5):
                 continue
             self._render_wanted.clear()
             if self._stop_event.is_set():
                 break
             if coalesce:
                 # Let anything already on its way land before drawing, so the
-                # refresh shows where the cursor ended up.
+                # refresh shows where things ended up.
                 time.sleep(coalesce)
                 self._render_wanted.clear()
             try:
+                if self._playback_dirty.is_set():
+                    self._playback_dirty.clear()
+                    self._refresh()
                 self.ui.flush()
             except Exception:
                 logger.exception("e-paper render failed")
 
+    def _invalidate_playback(self):
+        """Ask the render thread to re-read and redraw.
+
+        Reading and drawing happen on that one thread, which keeps them atomic
+        without a lock, keeps the panel's seconds-long refreshes off the actor,
+        and collapses the several events a single track change fires into one
+        read and one draw.
+        """
+        self._playback_dirty.set()
+        self._render_wanted.set()
+
     def _refresh(self):
         if self.ui is None:
             return
-
-        # Both the actor thread and the ticker call this. Reading state and
-        # rendering it has to be one atomic step: otherwise each thread takes
-        # its own snapshot and whichever renders second can be carrying the
-        # older one, which is enough to wake a panel that was just put to
-        # sleep, or to walk the progress bar backwards.
-        with self._refresh_lock:
-            try:
-                number, total = self.player.position()
-                playback = Playback(
-                    track=self.core.playback.get_current_track().get(),
-                    state=self.core.playback.get_state().get(),
-                    # Read the real position every time rather than
-                    # extrapolating, so the progress bar cannot drift.
-                    position_ms=self.core.playback.get_time_position().get(),
-                    volume=self.core.mixer.get_volume().get(),
-                    number=number,
-                    total=total,
-                    muted=self.core.mixer.get_mute().get(),
-                )
-            except Exception:
-                logger.exception("Could not read playback state")
-                return
-
-            try:
-                self.ui.render_playback(playback)
-            except Exception:
-                logger.exception("Could not update the e-paper display")
+        try:
+            playback = self.player.snapshot()
+        except Exception:
+            logger.exception("Could not read playback state")
+            return
+        try:
+            self.ui.render_playback(playback)
+        except Exception:
+            logger.exception("Could not update the e-paper display")
 
     def handle_input(self, action):
         """Apply an input action, from the HTTP API or anywhere else."""
@@ -218,7 +238,7 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
         # the screen while it is open. Otherwise show the result straight away
         # rather than waiting for the next tick.
         if not self.ui.locked and not self.ui.in_menu:
-            self._refresh()
+            self._invalidate_playback()
 
     def input_state(self):
         if self.ui is None or self.display is None:
@@ -231,22 +251,22 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
         }
 
     def track_playback_started(self, tl_track):
-        self._refresh()
+        self._invalidate_playback()
 
     def track_playback_ended(self, tl_track, time_position):
-        self._refresh()
+        self._invalidate_playback()
 
     def track_playback_paused(self, tl_track, time_position):
-        self._refresh()
+        self._invalidate_playback()
 
     def track_playback_resumed(self, tl_track, time_position):
-        self._refresh()
+        self._invalidate_playback()
 
     def playback_state_changed(self, old_state, new_state):
-        self._refresh()
+        self._invalidate_playback()
 
     def volume_changed(self, volume):
-        self._refresh()
+        self._invalidate_playback()
 
     def mute_changed(self, mute):
-        self._refresh()
+        self._invalidate_playback()
