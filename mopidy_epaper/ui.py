@@ -98,7 +98,7 @@ def status_key(playback):
 
 
 class Ui:
-    def __init__(self, config, display, player=None):
+    def __init__(self, config, display, player=None, on_dirty=None):
         """``player`` supplies everything that needs Mopidy.
 
         It is injected rather than imported so this whole state machine stays
@@ -107,6 +107,11 @@ class Ui:
         ``options`` and ``set_option``.
         """
         self._display = display
+        # Without a notifier the menu draws inline, which is what the tests
+        # want. With one, drawing is deferred to whoever provided it, so a
+        # burst of presses collapses into a single refresh.
+        self._on_dirty = on_dirty
+        self._menu_dirty = False
         self._sleep_after = config["sleep_after"]
         self._idle_screen = config["idle_screen"]
         self._menu_timeout = config.get("menu_timeout", 20)
@@ -516,6 +521,27 @@ class Ui:
         self._leave_menu()
 
     def _draw_menu(self):
+        if self._on_dirty is None:
+            self._render_menu()
+            return
+        self._menu_dirty = True
+        self._on_dirty()
+
+    def flush(self):
+        """Draw the menu if navigation has left it stale.
+
+        Called from the render thread, so several presses that arrived while
+        the panel was busy produce one refresh showing where the cursor ended
+        up, rather than one refresh per press.
+        """
+        with self._lock:
+            if not self._menu_dirty:
+                return
+            self._menu_dirty = False
+            if self._stack and not self._locked:
+                self._render_menu()
+
+    def _render_menu(self):
         frame = self._stack[-1]
         image = menu.render(frame["title"], frame["items"], frame["selected"], frame["offset"])
         self._base_image = None

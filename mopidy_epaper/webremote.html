@@ -1,0 +1,148 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>e-paper remote</title>
+<style>
+  :root {
+    --bg: #f4f4f5;
+    --panel: #ffffff;
+    --ink: #18181b;
+    --muted: #71717a;
+    --line: #d4d4d8;
+    --accent: #18181b;
+    --accent-ink: #ffffff;
+    --bad: #b91c1c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #09090b;
+      --panel: #18181b;
+      --ink: #fafafa;
+      --muted: #a1a1aa;
+      --line: #3f3f46;
+      --accent: #fafafa;
+      --accent-ink: #09090b;
+      --bad: #f87171;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 1.25rem 1rem 2rem;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  main { max-width: 24rem; margin: 0 auto; }
+  h1 { font-size: 1rem; font-weight: 600; margin: 0 0 .75rem; letter-spacing: .01em; }
+  #status {
+    display: flex; flex-wrap: wrap; gap: .375rem;
+    min-height: 1.75rem; margin-bottom: 1rem;
+  }
+  .badge {
+    font-size: .75rem; padding: .1875rem .5rem; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--muted); background: var(--panel);
+  }
+  .badge.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .pad {
+    display: grid; gap: .5rem;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-areas: ". up ." "back select home" ". down .";
+  }
+  .row { display: grid; gap: .5rem; grid-template-columns: repeat(4, 1fr); margin-top: .5rem; }
+  button {
+    font: inherit; font-weight: 500;
+    min-height: 3.5rem; padding: .5rem .25rem;
+    border: 1px solid var(--line); border-radius: .625rem;
+    background: var(--panel); color: var(--ink);
+    cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  }
+  button:active { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  .row button { font-size: .8125rem; min-height: 3rem; }
+  [data-action="up"] { grid-area: up; }
+  [data-action="down"] { grid-area: down; }
+  [data-action="back"] { grid-area: back; }
+  [data-action="home"] { grid-area: home; }
+  [data-action="select"] { grid-area: select; }
+  #log { margin-top: 1rem; min-height: 1.25rem; font-size: .8125rem; color: var(--muted); }
+  #log.error { color: var(--bad); }
+  footer { margin-top: 1.5rem; font-size: .75rem; color: var(--muted); }
+</style>
+
+<main>
+  <h1>e-paper remote</h1>
+  <div id="status" aria-live="polite"></div>
+
+  <div class="pad">
+    <button data-action="up">Up</button>
+    <button data-action="back">Back</button>
+    <button data-action="select">Select</button>
+    <button data-action="home">Menu</button>
+    <button data-action="down">Down</button>
+  </div>
+
+  <div class="row">
+    <button data-action="toggle_lock">Lock</button>
+    <button data-action="wake">Wake</button>
+    <button data-action="toggle_shuffle">Shuffle</button>
+    <button data-action="toggle_repeat">Repeat</button>
+  </div>
+
+  <div id="log" aria-live="polite"></div>
+  <footer>Panel refreshes take a second or two; presses are queued, not waited on.</footer>
+</main>
+
+<script>
+  const log = document.getElementById("log");
+  const status = document.getElementById("status");
+
+  function say(text, isError) {
+    log.textContent = text;
+    log.classList.toggle("error", Boolean(isError));
+  }
+
+  async function send(action) {
+    try {
+      const response = await fetch("input/" + action, { method: "POST" });
+      if (response.ok) {
+        say(action);
+      } else {
+        const body = await response.json().catch(() => ({}));
+        say(body.error || (action + ": " + response.status), true);
+      }
+    } catch (err) {
+      say("could not reach the panel", true);
+    }
+    refresh();
+  }
+
+  function badge(label, on) {
+    const el = document.createElement("span");
+    el.className = "badge" + (on ? " on" : "");
+    el.textContent = label;
+    return el;
+  }
+
+  async function refresh() {
+    try {
+      const response = await fetch("status");
+      const state = await response.json();
+      status.replaceChildren(
+        badge(state.locked ? "locked" : "unlocked", state.locked),
+        badge(state.asleep ? "asleep" : "awake", state.asleep),
+        badge(state.in_menu ? "menu" : "now playing", state.in_menu),
+      );
+    } catch (err) {
+      status.replaceChildren(badge("offline", false));
+    }
+  }
+
+  document.querySelectorAll("button[data-action]").forEach((button) => {
+    button.addEventListener("click", () => send(button.dataset.action));
+  });
+
+  refresh();
+  setInterval(refresh, 5000);
+</script>

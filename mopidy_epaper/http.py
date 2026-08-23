@@ -10,6 +10,7 @@ Rides on the web server Mopidy already runs; routes are mounted under
 """
 
 import logging
+import pathlib
 
 import pykka
 import tornado.web
@@ -23,12 +24,15 @@ logger = logging.getLogger(__name__)
 # the actor for a second or two on a Pi Zero.
 STATUS_TIMEOUT = 3
 
+REMOTE_PAGE = pathlib.Path(__file__).parent / "webremote.html"
+
 
 def factory(config, core):
     return [
         (r"/input/([a-zA-Z_]+)", InputHandler),
         (r"/status", StatusHandler),
-        (r"/", IndexHandler),
+        (r"/actions", ActionsHandler),
+        (r"/", IndexHandler, {"web_remote": config["epaper"]["web_remote"]}),
     ]
 
 
@@ -82,7 +86,9 @@ class StatusHandler(_FrontendHandler):
             self.finish({"error": "the e-paper frontend did not respond in time"})
 
 
-class IndexHandler(tornado.web.RequestHandler):
+class ActionsHandler(tornado.web.RequestHandler):
+    """The vocabulary, always available regardless of the remote setting."""
+
     def get(self):
         self.finish(
             {
@@ -91,3 +97,24 @@ class IndexHandler(tornado.web.RequestHandler):
                 "usage": "POST /epaper/input/<action>, GET /epaper/status",
             }
         )
+
+
+class IndexHandler(ActionsHandler):
+    """The remote page, or the vocabulary when the remote is switched off."""
+
+    def initialize(self, web_remote=True):
+        self._web_remote = web_remote
+
+    def get(self):
+        if not self._web_remote:
+            super().get()
+            return
+        try:
+            page = REMOTE_PAGE.read_text(encoding="utf-8")
+        except OSError:
+            logger.exception("Could not read %s", REMOTE_PAGE)
+            self.set_status(500)
+            self.finish({"error": "the remote page is missing"})
+            return
+        self.set_header("Content-Type", "text/html; charset=utf-8")
+        self.finish(page)

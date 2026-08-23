@@ -302,6 +302,69 @@ Doing so makes mopidy-local try to scan the m3u file as audio and log a
 harmless warning; `[local] excluded_file_extensions` silences it, but
 that setting replaces the default list rather than extending it.
 
+## Web remote (2026-08-23, unverified)
+
+`/epaper/` now serves a small HTML remote instead of a JSON blob: the
+five navigation buttons plus lock, wake, shuffle and repeat, with badges
+for locked/asleep/in-menu. Toggled by `web_remote` in `mopidy.conf`;
+`false` restores the JSON listing there. `GET /epaper/actions` always
+returns the vocabulary regardless, so nothing was lost.
+
+The point of it is evaluating the browsing UX. Tapping through a menu at
+real speed is a completely different experience from sending one `curl`
+at a time, and it needs no hardware.
+
+The page is static, self-contained, and uses relative URLs so it does not
+care where the app is mounted. `tests/test_webremote.py` checks that
+every button maps to an implemented action and that the file is listed as
+package data — both silent failures otherwise.
+
+**Reaching it from a phone is a Mopidy-wide decision.** Mopidy binds to
+127.0.0.1 by default, so this is localhost-only until `[http] hostname`
+changes, which exposes all of Mopidy's API rather than just this page.
+
+## Input coalescing (2026-08-23, unverified)
+
+Scrolling felt slow. There was no artificial delay to remove — the wait
+is `displayPartial()` writing over SPI and polling the busy pin — but
+every press was rendering, so five quick presses meant five sequential
+refreshes and the panel stepping through every intermediate position.
+
+Menu draws are now deferred to a render thread. `Ui` takes an `on_dirty`
+notifier; with one, navigation marks the menu stale instead of drawing,
+and `flush()` renders the current state. The frontend waits
+`input_coalesce_ms` (default 80) after the first notification so a burst
+lands before it draws once.
+
+Without a notifier `Ui` still draws inline, which keeps the existing
+tests meaningful rather than having them assert on a deferred side
+effect.
+
+A second benefit: a full refresh no longer blocks the actor thread, so
+Mopidy's events stop queueing behind the SPI bus.
+
+The floor is still the panel — a partial refresh is a few hundred
+milliseconds and no setting changes that.
+
+**Verified on hardware 2026-08-23.** The interface feels markedly better
+with coalescing on; the web remote renders and drives the panel.
+
+## Backlog
+
+Discussed and worth doing, not yet built:
+
+- **Alphabet jump.** With five buttons, reaching a track deep in a long
+  list means pressing `down` a hundred times. A first-letter jump strip
+  is what stops the panel falling apart past a few hundred albums. Not
+  painful at the current library size.
+- **Append vs replace.** Selecting a track calls `tracklist.clear()`
+  first, so there is no way to add to a queue that is already playing. An
+  `enqueue` action alongside `select` would fix it.
+- **Seek and volume actions.** `seek_forward` / `seek_back` by 30s, and
+  `volume_up` / `volume_down`. The API currently carries shuffle and
+  repeat but not volume, which is a little inconsistent — transport was
+  deferred to mopidy-raspberry-gpio.
+
 ## Known limitations / deferred
 
 - **Radio stream titles don't update.** For a stream, the track URI and
