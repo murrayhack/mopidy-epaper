@@ -18,6 +18,8 @@ class Extension(ext.Extension):
         schema["driver"] = config.String(choices=["epd2in13_v4", "dummy"])
         schema["update_interval"] = config.Integer(minimum=1)
         schema["full_refresh_every"] = config.Integer(minimum=1)
+        schema["sleep_after"] = config.Integer(minimum=0)
+        schema["idle_screen"] = config.String(choices=["keep", "blank"])
         schema["dummy_output_path"] = config.Path(optional=True)
         return schema
 

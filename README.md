@@ -75,6 +75,8 @@ enabled = true
 driver = epd2in13_v4
 update_interval = 5
 full_refresh_every = 60
+sleep_after = 300
+idle_screen = keep
 dummy_output_path =
 ```
 
@@ -83,9 +85,66 @@ dummy_output_path =
 | `driver` | `epd2in13_v4` for the real panel, or `dummy` to render PNG frames to disk instead. |
 | `update_interval` | Seconds between progress-bar refreshes while playing. |
 | `full_refresh_every` | Partial refreshes allowed before forcing a full refresh to clear ghosting. |
+| `sleep_after` | Seconds of stopped playback before the panel is put to sleep. `0` disables it. |
+| `idle_screen` | `keep` leaves the last frame on the panel when it sleeps, `blank` clears it first. |
 | `dummy_output_path` | Where the `dummy` driver writes its PNG. Defaults to `/tmp/mopidy-epaper.png`. |
 
 Confirm the extension is loaded with `mopidy deps list`.
+
+## Sleep and lock
+
+E-paper holds its image with no power at all, which shapes how this works.
+
+When playback has been stopped for `sleep_after` seconds the panel controller
+is powered down, leaving whatever was last drawn still visible. Playback wakes
+it again. Waking re-initialises the controller, so the first frame after a wake
+is always a full refresh.
+
+The panel can also be locked, like the hold switch on an old MP3 player. A
+locked panel draws a padlock, sleeps, and ignores everything until it is
+unlocked — the frozen frame *is* the lock screen, costing nothing to display.
+
+Lock is exposed to callers rather than bound to any particular button; see the
+input API below once it lands.
+
+## Driving it by hand
+
+Mopidy's JSON-RPC API over HTTP is the quickest way to exercise the display
+without a web client. Queue the first file in `~/music` and play it:
+
+```sh
+F=$(python3 -c "import pathlib; print(sorted((pathlib.Path.home()/'music').iterdir())[0].as_uri())")
+
+curl -s -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"core.tracklist.add\",\"params\":{\"uris\":[\"$F\"]}}" \
+  -H 'Content-Type: application/json' http://localhost:6680/mopidy/rpc
+
+curl -s -d '{"jsonrpc":"2.0","id":1,"method":"core.playback.play"}' \
+  -H 'Content-Type: application/json' http://localhost:6680/mopidy/rpc
+```
+
+Deriving the URI through `pathlib` matters: filenames with spaces need
+percent-encoding, and a raw `file://$F` will silently resolve to nothing and
+return an empty `result`.
+
+Stop, and clear the queue between runs:
+
+```sh
+curl -s -d '{"jsonrpc":"2.0","id":1,"method":"core.playback.stop"}' \
+  -H 'Content-Type: application/json' http://localhost:6680/mopidy/rpc
+
+curl -s -d '{"jsonrpc":"2.0","id":1,"method":"core.tracklist.clear"}' \
+  -H 'Content-Type: application/json' http://localhost:6680/mopidy/rpc
+```
+
+### Testing sleep and wake
+
+Set `sleep_after = 20` so you are not waiting five minutes, then play, stop,
+and wait. Mopidy logs each transition at info level — `Panel idle for 20s,
+sleeping`, then `Panel awake` when playback resumes.
+
+If it does not flash on wake, the log tells you which of two things happened;
+so does the panel. If the display carries on updating, it simply never slept.
+If it stays frozen, it slept and the SPI re-init failed.
 
 ## Development
 

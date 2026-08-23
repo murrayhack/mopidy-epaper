@@ -118,3 +118,32 @@ def test_truncate_ellipsizes_long_text():
     assert result.endswith("…")
     assert len(result) < len(text)
     assert draw.textlength(result, font=font) <= 100
+
+
+def test_locked_render_differs_from_unlocked():
+    track = FakeTrack()
+    unlocked = layout.render(track, "playing", 1000, 50)
+    locked = layout.render(track, "playing", 1000, 50, locked=True)
+
+    assert unlocked.tobytes() != locked.tobytes()
+
+
+def test_locked_render_is_panel_sized():
+    image = layout.render(FakeTrack(), "playing", 1000, 50, locked=True)
+
+    assert image.size == (layout.WIDTH, layout.HEIGHT)
+    assert image.mode == "1"
+
+
+def test_locked_render_without_track_does_not_raise():
+    image = layout.render(None, "stopped", 0, None, locked=True)
+
+    assert image.size == (layout.WIDTH, layout.HEIGHT)
+
+
+def test_blank_is_an_empty_panel_sized_image():
+    image = layout.blank()
+
+    assert image.size == (layout.WIDTH, layout.HEIGHT)
+    assert image.mode == "1"
+    assert set(image.getdata()) == {layout.WHITE}

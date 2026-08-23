@@ -95,6 +95,45 @@ Local execution is off the table on this Mac by preference — verification
 happens on the Pi. (For the record: an attempt to create a local `.venv`
 under Homebrew Python 3.14 failed at the `ensurepip` step.)
 
+## Phase 1 — panel power and lock (written 2026-08-22, unverified)
+
+Implements the first phase of the roadmap. **Not yet run on hardware.**
+
+Refactor: `display.py` no longer knows about tracks. It is panel I/O only —
+`show(image, force_full)`, `sleep()`, `wake()` — and the new `ui.py` owns
+all screen state, including the content-key logic that used to live in
+`display.py`. This is what makes the refresh machinery reusable by a menu
+screen in phase 3.
+
+New behaviour:
+
+- Panel sleeps after `sleep_after` seconds of stopped playback and wakes
+  on playback. `idle_screen` chooses whether the last frame stays visible
+  (`keep`) or is cleared first (`blank`).
+- Lock state: draws a padlock, sleeps, and ignores playback updates until
+  unlocked. No way to trigger it yet — that arrives with the input API in
+  phase 2.
+- Redundant redraws are now skipped entirely. Previously every tick while
+  paused burned a partial refresh, and its ghosting budget, on an
+  identical frame.
+
+**Verified on hardware 2026-08-23:** the panel sleeps after the configured
+idle period and wakes cleanly on playback. `epd.init()` does reopen SPI
+after `module_exit()` closed it, which was the main risk in this phase.
+
+One bug found in that first run: the panel slept and then woke itself
+57ms later, from the other thread. `frontend._refresh()` read playback
+state and rendered it as two separate steps, so the ticker and the actor
+each took their own snapshot and whichever rendered second could be
+carrying the older one — enough to wake a panel that had just gone to
+sleep, and enough to walk the progress bar backwards. Reading and
+rendering are now atomic under a lock.
+
+Note the Pi has no working audio sink (`GStreamer warning: Failed to
+connect: Connection refused`), so playback state during testing is not
+entirely representative. Audio output is out of scope for this repo, but
+it makes the sleep/wake test noisier than it should be.
+
 ## Known limitations / deferred
 
 - **Radio stream titles don't update.** For a stream, the track URI and
