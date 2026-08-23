@@ -106,19 +106,8 @@ def _state_name(state):
     return getattr(state, "value", state)
 
 
-def render(
-    track,
-    state,
-    position_ms,
-    volume,
-    elapsed_only=False,
-    base=None,
-    locked=False,
-    number=None,
-    total=None,
-    muted=False,
-):
-    """Render the now-playing screen.
+def render(playback, elapsed_only=False, base=None, locked=False):
+    """Render the now-playing screen from a :class:`~mopidy_epaper.playback.Playback`.
 
     With ``elapsed_only`` the status strip is redrawn onto ``base`` in place and
     that same image is returned, which is what feeds a partial refresh.
@@ -127,15 +116,15 @@ def render(
     if elapsed_only and base is not None:
         draw = ImageDraw.Draw(base)
         draw.rectangle((0, STATUS_TOP, WIDTH, HEIGHT), fill=WHITE)
-        _draw_status(draw, track, state, position_ms, volume, number, total, muted)
+        _draw_status(draw, playback)
         return base
 
     image = blank()
     draw = ImageDraw.Draw(image)
-    _draw_track(draw, track, reserve_right=locked)
+    _draw_track(draw, playback.track, reserve_right=locked)
     if locked:
         _draw_lock_glyph(draw, WIDTH - MARGIN - 11, 8)
-    _draw_status(draw, track, state, position_ms, volume, number, total, muted)
+    _draw_status(draw, playback)
     return image
 
 
@@ -174,8 +163,9 @@ def _draw_track(draw, track, reserve_right=False):
         )
 
 
-def _draw_status(draw, track, state, position_ms, volume, number=None, total=None, muted=False):
-    length_ms = getattr(track, "length", None)
+def _draw_status(draw, playback):
+    position_ms = playback.position_ms
+    length_ms = playback.length_ms
 
     bar_top = STATUS_TOP + 2
     bar_bottom = bar_top + 8
@@ -194,20 +184,22 @@ def _draw_status(draw, track, state, position_ms, volume, number=None, total=Non
     text_font = _load_font(bold=False, size=13)
     text_y = bar_bottom + 5
 
-    _draw_state_glyph(draw, MARGIN, text_y + 2, state)
+    _draw_state_glyph(draw, MARGIN, text_y + 2, playback.state)
 
     times = f"{_format_ms(position_ms)} / {_format_ms(length_ms)}"
     draw.text((MARGIN + 16, text_y), times, font=text_font, fill=BLACK)
 
     right_edge = WIDTH - MARGIN
+    volume = playback.volume
     if volume is not None:
         vol_text = str(volume)
         vol_width = draw.textlength(vol_text, font=text_font)
         draw.text((right_edge - vol_width, text_y), vol_text, font=text_font, fill=BLACK)
         glyph_x = right_edge - vol_width - 4 - VOLUME_GLYPH_WIDTH
-        _draw_volume_glyph(draw, glyph_x, text_y + 2, muted=muted)
+        _draw_volume_glyph(draw, glyph_x, text_y + 2, muted=playback.muted)
         right_edge = glyph_x - 10
 
+    number, total = playback.number, playback.total
     if number and total:
         # Where you are in the queue. Placed left of the volume rather than
         # centred, because a long elapsed/total pair reaches past the middle of

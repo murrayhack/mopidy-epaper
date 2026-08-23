@@ -3,6 +3,22 @@ import time
 import pytest
 
 from mopidy_epaper import ui
+from mopidy_epaper.playback import Playback
+
+
+def render_playback(screen, track, state, position_ms, volume, number=None, total=0, muted=False):
+    """Build a Playback and hand it to the screen, so the tests stay readable."""
+    screen.render_playback(
+        Playback(
+            track=track,
+            state=state,
+            position_ms=position_ms,
+            volume=volume,
+            number=number,
+            total=total,
+            muted=muted,
+        )
+    )
 
 
 class FakeArtist:
@@ -130,7 +146,7 @@ def clock(monkeypatch):
 
 def test_first_render_is_a_full_refresh():
     display = FakeDisplay()
-    make_ui(display).render_playback(FakeTrack(), "playing", 0, 80)
+    render_playback(make_ui(display), FakeTrack(), "playing", 0, 80)
 
     assert display.shows == [True]
 
@@ -140,8 +156,8 @@ def test_progress_advancing_uses_a_partial_refresh():
     screen = make_ui(display)
     track = FakeTrack()
 
-    screen.render_playback(track, "playing", 0, 80)
-    screen.render_playback(track, "playing", 5000, 80)
+    render_playback(screen, track, "playing", 0, 80)
+    render_playback(screen, track, "playing", 5000, 80)
 
     assert display.shows == [True, False]
 
@@ -151,8 +167,8 @@ def test_identical_state_skips_the_refresh_entirely():
     screen = make_ui(display)
     track = FakeTrack()
 
-    screen.render_playback(track, "playing", 5000, 80)
-    screen.render_playback(track, "playing", 5000, 80)
+    render_playback(screen, track, "playing", 5000, 80)
+    render_playback(screen, track, "playing", 5000, 80)
 
     assert display.shows == [True]
 
@@ -162,8 +178,8 @@ def test_sub_second_progress_change_skips_the_refresh():
     screen = make_ui(display)
     track = FakeTrack()
 
-    screen.render_playback(track, "playing", 5000, 80)
-    screen.render_playback(track, "playing", 5400, 80)
+    render_playback(screen, track, "playing", 5000, 80)
+    render_playback(screen, track, "playing", 5400, 80)
 
     assert display.shows == [True]
 
@@ -172,8 +188,8 @@ def test_track_change_forces_a_full_refresh():
     display = FakeDisplay()
     screen = make_ui(display)
 
-    screen.render_playback(FakeTrack(uri="a", name="One"), "playing", 0, 80)
-    screen.render_playback(FakeTrack(uri="b", name="Two"), "playing", 0, 80)
+    render_playback(screen, FakeTrack(uri="a", name="One"), "playing", 0, 80)
+    render_playback(screen, FakeTrack(uri="b", name="Two"), "playing", 0, 80)
 
     assert display.shows == [True, True]
 
@@ -183,8 +199,8 @@ def test_volume_change_redraws_the_status_strip():
     screen = make_ui(display)
     track = FakeTrack()
 
-    screen.render_playback(track, "playing", 5000, 80)
-    screen.render_playback(track, "playing", 5000, 40)
+    render_playback(screen, track, "playing", 5000, 80)
+    render_playback(screen, track, "playing", 5000, 40)
 
     assert display.shows == [True, False]
 
@@ -192,7 +208,7 @@ def test_volume_change_redraws_the_status_strip():
 def test_lock_draws_a_final_frame_then_sleeps():
     display = FakeDisplay()
     screen = make_ui(display)
-    screen.render_playback(FakeTrack(), "playing", 0, 80)
+    render_playback(screen, FakeTrack(), "playing", 0, 80)
 
     screen.lock()
 
@@ -206,11 +222,11 @@ def test_locked_panel_ignores_playback_updates():
     display = FakeDisplay()
     screen = make_ui(display)
     track = FakeTrack()
-    screen.render_playback(track, "playing", 0, 80)
+    render_playback(screen, track, "playing", 0, 80)
     screen.lock()
     shows_before = len(display.shows)
 
-    screen.render_playback(track, "playing", 60000, 80)
+    render_playback(screen, track, "playing", 60000, 80)
 
     assert len(display.shows) == shows_before
     assert display.asleep
@@ -219,7 +235,7 @@ def test_locked_panel_ignores_playback_updates():
 def test_unlock_wakes_the_panel():
     display = FakeDisplay()
     screen = make_ui(display)
-    screen.render_playback(FakeTrack(), "playing", 0, 80)
+    render_playback(screen, FakeTrack(), "playing", 0, 80)
     screen.lock()
 
     screen.unlock()
@@ -232,11 +248,11 @@ def test_unlocked_panel_redraws_in_full_after_waking():
     display = FakeDisplay()
     screen = make_ui(display)
     track = FakeTrack()
-    screen.render_playback(track, "playing", 0, 80)
+    render_playback(screen, track, "playing", 0, 80)
     screen.lock()
     screen.unlock()
 
-    screen.render_playback(track, "playing", 60000, 80)
+    render_playback(screen, track, "playing", 60000, 80)
 
     # Nothing survives on the panel to diff against after a wake.
     assert display.shows[-1] is True
@@ -245,7 +261,7 @@ def test_unlocked_panel_redraws_in_full_after_waking():
 def test_lock_is_idempotent():
     display = FakeDisplay()
     screen = make_ui(display)
-    screen.render_playback(FakeTrack(), "playing", 0, 80)
+    render_playback(screen, FakeTrack(), "playing", 0, 80)
 
     screen.lock()
     screen.lock()
@@ -258,9 +274,9 @@ def test_panel_sleeps_once_stopped_for_long_enough(clock):
     screen = make_ui(display, sleep_after=60)
     track = FakeTrack()
 
-    screen.render_playback(track, "stopped", 0, 80)
+    render_playback(screen, track, "stopped", 0, 80)
     clock[0] += 61
-    screen.render_playback(track, "stopped", 0, 80)
+    render_playback(screen, track, "stopped", 0, 80)
 
     assert display.sleeps == 1
     assert display.asleep
@@ -271,9 +287,9 @@ def test_panel_stays_awake_before_the_idle_timeout(clock):
     screen = make_ui(display, sleep_after=60)
     track = FakeTrack()
 
-    screen.render_playback(track, "stopped", 0, 80)
+    render_playback(screen, track, "stopped", 0, 80)
     clock[0] += 30
-    screen.render_playback(track, "stopped", 0, 80)
+    render_playback(screen, track, "stopped", 0, 80)
 
     assert display.sleeps == 0
 
@@ -283,9 +299,9 @@ def test_sleep_after_zero_disables_idle_sleep(clock):
     screen = make_ui(display, sleep_after=0)
     track = FakeTrack()
 
-    screen.render_playback(track, "stopped", 0, 80)
+    render_playback(screen, track, "stopped", 0, 80)
     clock[0] += 100000
-    screen.render_playback(track, "stopped", 0, 80)
+    render_playback(screen, track, "stopped", 0, 80)
 
     assert display.sleeps == 0
 
@@ -294,13 +310,13 @@ def test_idle_panel_is_not_redrawn_while_asleep(clock):
     display = FakeDisplay()
     screen = make_ui(display, sleep_after=60)
     track = FakeTrack()
-    screen.render_playback(track, "stopped", 0, 80)
+    render_playback(screen, track, "stopped", 0, 80)
     clock[0] += 61
-    screen.render_playback(track, "stopped", 0, 80)
+    render_playback(screen, track, "stopped", 0, 80)
     shows_before = len(display.shows)
 
     clock[0] += 61
-    screen.render_playback(track, "stopped", 0, 80)
+    render_playback(screen, track, "stopped", 0, 80)
 
     assert len(display.shows) == shows_before
     assert display.sleeps == 1
@@ -310,11 +326,11 @@ def test_playback_wakes_an_idle_panel(clock):
     display = FakeDisplay()
     screen = make_ui(display, sleep_after=60)
     track = FakeTrack()
-    screen.render_playback(track, "stopped", 0, 80)
+    render_playback(screen, track, "stopped", 0, 80)
     clock[0] += 61
-    screen.render_playback(track, "stopped", 0, 80)
+    render_playback(screen, track, "stopped", 0, 80)
 
-    screen.render_playback(track, "playing", 0, 80)
+    render_playback(screen, track, "playing", 0, 80)
 
     assert display.wakes == 1
     assert not display.asleep
@@ -326,9 +342,9 @@ def test_blank_idle_screen_clears_the_panel_before_sleeping(clock):
     screen = make_ui(display, sleep_after=60, idle_screen="blank")
     track = FakeTrack()
 
-    screen.render_playback(track, "stopped", 0, 80)
+    render_playback(screen, track, "stopped", 0, 80)
     clock[0] += 61
-    screen.render_playback(track, "stopped", 0, 80)
+    render_playback(screen, track, "stopped", 0, 80)
 
     assert display.shows[-1] is True
     assert display.sleeps == 1
@@ -347,15 +363,15 @@ def test_unlocking_an_idle_asleep_panel_resumes_drawing(clock):
     display = FakeDisplay()
     screen = make_ui(display, sleep_after=60)
     track = FakeTrack()
-    screen.render_playback(track, "stopped", 0, 80)
+    render_playback(screen, track, "stopped", 0, 80)
     clock[0] += 61
-    screen.render_playback(track, "stopped", 0, 80)
+    render_playback(screen, track, "stopped", 0, 80)
     assert display.asleep
 
     screen.lock()
     screen.unlock()
     shows_before = len(display.shows)
-    screen.render_playback(track, "stopped", 0, 80)
+    render_playback(screen, track, "stopped", 0, 80)
 
     # Still stopped, but the idle timer restarted, so it must draw rather than
     # stay stuck behind the asleep flag.
@@ -365,7 +381,7 @@ def test_unlocking_an_idle_asleep_panel_resumes_drawing(clock):
 def test_toggle_lock_locks_an_unlocked_panel():
     display = FakeDisplay()
     screen = make_ui(display)
-    screen.render_playback(FakeTrack(), "playing", 0, 80)
+    render_playback(screen, FakeTrack(), "playing", 0, 80)
 
     screen.handle_action("toggle_lock")
 
@@ -376,7 +392,7 @@ def test_toggle_lock_locks_an_unlocked_panel():
 def test_toggle_lock_unlocks_a_locked_panel():
     display = FakeDisplay()
     screen = make_ui(display)
-    screen.render_playback(FakeTrack(), "playing", 0, 80)
+    render_playback(screen, FakeTrack(), "playing", 0, 80)
     screen.handle_action("toggle_lock")
 
     screen.handle_action("toggle_lock")
@@ -388,7 +404,7 @@ def test_toggle_lock_unlocks_a_locked_panel():
 def test_lock_and_unlock_actions_dispatch():
     display = FakeDisplay()
     screen = make_ui(display)
-    screen.render_playback(FakeTrack(), "playing", 0, 80)
+    render_playback(screen, FakeTrack(), "playing", 0, 80)
 
     screen.handle_action("lock")
     assert screen.locked
@@ -401,9 +417,9 @@ def test_wake_action_wakes_an_idle_panel(clock):
     display = FakeDisplay()
     screen = make_ui(display, sleep_after=60)
     track = FakeTrack()
-    screen.render_playback(track, "stopped", 0, 80)
+    render_playback(screen, track, "stopped", 0, 80)
     clock[0] += 61
-    screen.render_playback(track, "stopped", 0, 80)
+    render_playback(screen, track, "stopped", 0, 80)
     assert display.asleep
 
     screen.handle_action("wake")
@@ -415,7 +431,7 @@ def test_wake_action_wakes_an_idle_panel(clock):
 def test_wake_action_does_nothing_while_locked():
     display = FakeDisplay()
     screen = make_ui(display)
-    screen.render_playback(FakeTrack(), "playing", 0, 80)
+    render_playback(screen, FakeTrack(), "playing", 0, 80)
     screen.handle_action("lock")
 
     screen.handle_action("wake")
@@ -431,7 +447,7 @@ def test_implemented_actions_are_a_subset_of_the_vocabulary():
 def test_back_from_now_playing_does_nothing():
     display = FakeDisplay()
     screen = make_ui(display)
-    screen.render_playback(FakeTrack(), "playing", 0, 80)
+    render_playback(screen, FakeTrack(), "playing", 0, 80)
     shows_before = len(display.shows)
 
     screen.handle_action("back")
@@ -443,7 +459,7 @@ def test_back_from_now_playing_does_nothing():
 def test_navigation_from_now_playing_opens_the_menu():
     display = FakeDisplay()
     screen = make_ui(display)
-    screen.render_playback(FakeTrack(), "playing", 0, 80)
+    render_playback(screen, FakeTrack(), "playing", 0, 80)
 
     screen.handle_action("down")
 
@@ -468,7 +484,7 @@ def test_root_menu_has_a_fixed_shape():
 def test_cursor_starts_on_library_when_idle():
     display = FakeDisplay()
     screen = make_ui(display)
-    screen.render_playback(FakeTrack(), "stopped", 0, 80)
+    render_playback(screen, FakeTrack(), "stopped", 0, 80)
 
     screen.handle_action("home")
 
@@ -478,7 +494,7 @@ def test_cursor_starts_on_library_when_idle():
 def test_cursor_starts_on_queue_while_playing():
     display = FakeDisplay()
     screen = make_ui(display)
-    screen.render_playback(FakeTrack(), "playing", 0, 80)
+    render_playback(screen, FakeTrack(), "playing", 0, 80)
 
     screen.handle_action("home")
 
@@ -487,11 +503,11 @@ def test_cursor_starts_on_queue_while_playing():
 
 def test_root_menu_shape_is_the_same_either_way():
     playing = make_ui(FakeDisplay())
-    playing.render_playback(FakeTrack(), "playing", 0, 80)
+    render_playback(playing, FakeTrack(), "playing", 0, 80)
     playing.handle_action("home")
 
     idle = make_ui(FakeDisplay())
-    idle.render_playback(FakeTrack(), "stopped", 0, 80)
+    render_playback(idle, FakeTrack(), "stopped", 0, 80)
     idle.handle_action("home")
 
     assert [i.name for i in playing._stack[-1]["items"]] == [
@@ -648,7 +664,7 @@ def test_toggle_shuffle_action_works_outside_the_menu():
     display = FakeDisplay()
     player = FakePlayer()
     screen = make_ui(display, player=player)
-    screen.render_playback(FakeTrack(), "playing", 0, 80)
+    render_playback(screen, FakeTrack(), "playing", 0, 80)
 
     screen.handle_action("toggle_shuffle")
 
@@ -684,7 +700,7 @@ def test_playback_does_not_paint_over_an_open_menu():
     screen.handle_action("home")
     shows_before = len(display.shows)
 
-    screen.render_playback(FakeTrack(), "playing", 30000, 80)
+    render_playback(screen, FakeTrack(), "playing", 30000, 80)
 
     assert len(display.shows) == shows_before
     assert screen.in_menu
@@ -696,7 +712,7 @@ def test_menu_closes_itself_after_the_timeout(clock):
     screen.handle_action("home")
 
     clock[0] += 21
-    screen.render_playback(FakeTrack(), "playing", 0, 80)
+    render_playback(screen, FakeTrack(), "playing", 0, 80)
 
     assert not screen.in_menu
     # And the now-playing screen is redrawn in full over the menu.
@@ -709,7 +725,7 @@ def test_menu_stays_open_before_the_timeout(clock):
     screen.handle_action("home")
 
     clock[0] += 10
-    screen.render_playback(FakeTrack(), "playing", 0, 80)
+    render_playback(screen, FakeTrack(), "playing", 0, 80)
 
     assert screen.in_menu
 
@@ -720,7 +736,7 @@ def test_menu_timeout_zero_keeps_the_menu_open(clock):
     screen.handle_action("home")
 
     clock[0] += 100000
-    screen.render_playback(FakeTrack(), "playing", 0, 80)
+    render_playback(screen, FakeTrack(), "playing", 0, 80)
 
     assert screen.in_menu
 
@@ -728,7 +744,7 @@ def test_menu_timeout_zero_keeps_the_menu_open(clock):
 def test_locked_panel_ignores_navigation():
     display = FakeDisplay()
     screen = make_ui(display)
-    screen.render_playback(FakeTrack(), "playing", 0, 80)
+    render_playback(screen, FakeTrack(), "playing", 0, 80)
     screen.handle_action("lock")
 
     screen.handle_action("home")
@@ -760,10 +776,10 @@ def test_browse_failure_leaves_an_empty_listing_rather_than_raising():
 
 def test_queue_position_is_drawn_and_changes_the_screen():
     without = make_ui(FakeDisplay())
-    without.render_playback(FakeTrack(), "playing", 5000, 80)
+    render_playback(without, FakeTrack(), "playing", 5000, 80)
 
     with_counter = make_ui(FakeDisplay())
-    with_counter.render_playback(FakeTrack(), "playing", 5000, 80, 3, 12)
+    render_playback(with_counter, FakeTrack(), "playing", 5000, 80, 3, 12)
 
     assert without._base_image.tobytes() != with_counter._base_image.tobytes()
 
@@ -773,16 +789,21 @@ def test_queue_growing_redraws_the_status_strip():
     screen = make_ui(display)
     track = FakeTrack()
 
-    screen.render_playback(track, "playing", 5000, 80, 1, 2)
-    screen.render_playback(track, "playing", 5000, 80, 1, 3)
+    render_playback(screen, track, "playing", 5000, 80, 1, 2)
+    render_playback(screen, track, "playing", 5000, 80, 1, 3)
 
     # Same track and same second, but the total changed, so it must redraw.
     assert display.shows == [True, False]
 
 
 def test_status_key_covers_the_queue_position():
-    assert ui.status_key("playing", 5000, 80, 1, 2) != ui.status_key("playing", 5000, 80, 1, 3)
-    assert ui.status_key("playing", 5000, 80, 1, 2) == ui.status_key("playing", 5000, 80, 1, 2)
+    two = Playback(state="playing", position_ms=5000, volume=80, number=1, total=2)
+    three = Playback(state="playing", position_ms=5000, volume=80, number=1, total=3)
+
+    assert ui.status_key(two) != ui.status_key(three)
+    assert ui.status_key(two) == ui.status_key(
+        Playback(state="playing", position_ms=5000, volume=80, number=1, total=2)
+    )
 
 
 def test_muting_redraws_the_status_strip():
@@ -790,14 +811,16 @@ def test_muting_redraws_the_status_strip():
     screen = make_ui(display)
     track = FakeTrack()
 
-    screen.render_playback(track, "playing", 5000, 80, 1, 2, False)
-    screen.render_playback(track, "playing", 5000, 80, 1, 2, True)
+    render_playback(screen, track, "playing", 5000, 80, 1, 2, False)
+    render_playback(screen, track, "playing", 5000, 80, 1, 2, True)
 
     # Same track, second and level: only mute changed, and it must still show.
     assert display.shows == [True, False]
 
 
 def test_status_key_covers_mute():
-    assert ui.status_key("playing", 5000, 80, 1, 2, False) != ui.status_key(
-        "playing", 5000, 80, 1, 2, True
+    common = {"state": "playing", "position_ms": 5000, "volume": 80, "number": 1, "total": 2}
+
+    assert ui.status_key(Playback(**common, muted=False)) != ui.status_key(
+        Playback(**common, muted=True)
     )

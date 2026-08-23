@@ -12,6 +12,7 @@ import pykka
 from mopidy import core
 
 from .display import EpaperDisplay
+from .playback import Playback
 from .ui import Ui
 
 logger = logging.getLogger(__name__)
@@ -139,20 +140,24 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
         # sleep, or to walk the progress bar backwards.
         with self._refresh_lock:
             try:
-                track = self.core.playback.get_current_track().get()
-                state = self.core.playback.get_state().get()
-                # Read the real position every time rather than extrapolating,
-                # so the progress bar cannot drift out of sync.
-                position = self.core.playback.get_time_position().get()
-                volume = self.core.mixer.get_volume().get()
                 number, total = self.player.position()
-                muted = self.core.mixer.get_mute().get()
+                playback = Playback(
+                    track=self.core.playback.get_current_track().get(),
+                    state=self.core.playback.get_state().get(),
+                    # Read the real position every time rather than
+                    # extrapolating, so the progress bar cannot drift.
+                    position_ms=self.core.playback.get_time_position().get(),
+                    volume=self.core.mixer.get_volume().get(),
+                    number=number,
+                    total=total,
+                    muted=self.core.mixer.get_mute().get(),
+                )
             except Exception:
                 logger.exception("Could not read playback state")
                 return
 
             try:
-                self.ui.render_playback(track, state, position, volume, number, total, muted)
+                self.ui.render_playback(playback)
             except Exception:
                 logger.exception("Could not update the e-paper display")
 

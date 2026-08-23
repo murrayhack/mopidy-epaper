@@ -80,12 +80,20 @@ def content_key(track):
     return (getattr(track, "uri", None), getattr(track, "name", None))
 
 
-def status_key(state, position_ms, volume, number=None, total=None, muted=False):
+def status_key(playback):
     """Identify what the status strip shows, at the resolution it displays."""
+    position_ms = playback.position_ms
     seconds = None if position_ms is None else int(position_ms) // 1000
     # number and total belong here rather than in content_key: adding tracks to
     # the queue changes the total without changing the track on screen.
-    return (layout._state_name(state), seconds, volume, number, total, muted)
+    return (
+        layout._state_name(playback.state),
+        seconds,
+        playback.volume,
+        playback.number,
+        playback.total,
+        playback.muted,
+    )
 
 
 class Ui:
@@ -126,12 +134,10 @@ class Ui:
         with self._lock:
             return bool(self._stack)
 
-    def render_playback(
-        self, track, state, position_ms, volume, number=None, total=None, muted=False
-    ):
+    def render_playback(self, playback):
         """Draw the current playback state, or sleep if it has been idle."""
         with self._lock:
-            self._last_playback = (track, state, position_ms, volume, number, total, muted)
+            self._last_playback = playback
 
             if self._locked:
                 return
@@ -143,7 +149,7 @@ class Ui:
                     return
                 self._leave_menu()
 
-            playing = layout._state_name(state) == "playing"
+            playing = layout._state_name(playback.state) == "playing"
             now = time.monotonic()
 
             if playing:
@@ -162,7 +168,7 @@ class Ui:
                     self._go_idle()
                     return
 
-            self._draw_playback(track, state, position_ms, volume, number, total, muted)
+            self._draw_playback(playback)
 
     def handle_action(self, action):
         """Apply an input action. Unknown ones are rejected before they reach here."""
@@ -225,17 +231,7 @@ class Ui:
                 )
                 self._display.show(image, force_full=True)
             elif self._last_playback is not None:
-                track, state, position_ms, volume, number, total, muted = self._last_playback
-                image = layout.render(
-                    track,
-                    state,
-                    position_ms,
-                    volume,
-                    locked=True,
-                    number=number,
-                    total=total,
-                    muted=muted,
-                )
+                image = layout.render(self._last_playback, locked=True)
                 self._base_image = image
                 self._display.show(image, force_full=True)
             self._display.sleep()
@@ -311,7 +307,7 @@ class Ui:
     def _is_playing(self):
         if self._last_playback is None:
             return False
-        return layout._state_name(self._last_playback[1]) == "playing"
+        return layout._state_name(self._last_playback.state) == "playing"
 
     def _options(self):
         if self._player is None:
@@ -491,23 +487,12 @@ class Ui:
         self._base_image = None
         logger.info("Panel idle for %ss, sleeping", self._sleep_after)
 
-    def _draw_playback(
-        self, track, state, position_ms, volume, number=None, total=None, muted=False
-    ):
-        content = content_key(track)
-        status = status_key(state, position_ms, volume, number, total, muted)
+    def _draw_playback(self, playback):
+        content = content_key(playback.track)
+        status = status_key(playback)
 
         if self._base_image is None or content != self._last_content:
-            image = layout.render(
-                track,
-                state,
-                position_ms,
-                volume,
-                locked=self._locked,
-                number=number,
-                total=total,
-                muted=muted,
-            )
+            image = layout.render(playback, locked=self._locked)
             self._base_image = image
             self._last_content = content
             self._last_status = status
@@ -521,16 +506,7 @@ class Ui:
             return
 
         image = layout.render(
-            track,
-            state,
-            position_ms,
-            volume,
-            elapsed_only=True,
-            base=self._base_image,
-            locked=self._locked,
-            number=number,
-            total=total,
-            muted=muted,
+            playback, elapsed_only=True, base=self._base_image, locked=self._locked
         )
         self._last_status = status
         self._display.show(image)
