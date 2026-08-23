@@ -64,32 +64,58 @@ LIBRARY = {
 }
 
 
-def fake_browse(uri):
-    return LIBRARY.get(uri, [])
+class _TlTrack:
+    def __init__(self, tlid, name):
+        self.tlid = tlid
+        self.track = _Ref(f"local:track:{tlid}", name)
 
 
-class PlayRecorder:
-    def __init__(self):
-        self.calls = []
+class FakePlayer:
+    """Stands in for frontend.MopidyPlayer."""
 
-    def __call__(self, uris, start_uri):
-        self.calls.append((uris, start_uri))
+    def __init__(self, library=None, queue=None, browse_error=False):
+        self.library = LIBRARY if library is None else library
+        self._queue = queue if queue is not None else []
+        self._options = {"shuffle": False, "repeat": "off"}
+        self.browse_error = browse_error
+        self.played = []
+        self.played_tlids = []
+
+    def browse(self, uri):
+        if self.browse_error:
+            raise RuntimeError("library is unavailable")
+        return self.library.get(uri, [])
+
+    def play(self, uris, start_uri):
+        self.played.append((uris, start_uri))
+
+    def queue(self):
+        return self._queue
+
+    def play_queued(self, tlid):
+        self.played_tlids.append(tlid)
+
+    def options(self):
+        return dict(self._options)
+
+    def set_option(self, name, value):
+        self._options[name] = value
 
 
-def make_ui(
-    display,
-    sleep_after=300,
-    idle_screen="keep",
-    menu_timeout=20,
-    browse=fake_browse,
-    play=None,
-):
+def make_ui(display, sleep_after=300, idle_screen="keep", menu_timeout=20, player=None):
     config = {
         "sleep_after": sleep_after,
         "idle_screen": idle_screen,
         "menu_timeout": menu_timeout,
     }
-    return ui.Ui(config, display, browse=browse, play=play)
+    return ui.Ui(config, display, player=FakePlayer() if player is None else player)
+
+
+def open_library(screen):
+    """home, then select the Library row."""
+    screen.handle_action("home")
+    screen._stack[-1]["selected"] = 0
+    screen.handle_action("select")
 
 
 @pytest.fixture
@@ -411,7 +437,7 @@ def test_back_from_now_playing_does_nothing():
     assert len(display.shows) == shows_before
 
 
-def test_navigation_from_now_playing_opens_the_browser():
+def test_navigation_from_now_playing_opens_the_menu():
     display = FakeDisplay()
     screen = make_ui(display)
     screen.render_playback(FakeTrack(), "playing", 0, 80)
@@ -421,26 +447,74 @@ def test_navigation_from_now_playing_opens_the_browser():
     assert screen.in_menu
 
 
-def test_browser_starts_at_the_library_root():
+def test_root_menu_has_a_fixed_shape():
     display = FakeDisplay()
     screen = make_ui(display)
 
     screen.handle_action("home")
 
-    assert screen.in_menu
     assert screen._stack[-1]["title"] == ui.ROOT_TITLE
+    assert [i.name for i in screen._stack[-1]["items"]] == [
+        "Library",
+        "Queue",
+        "Shuffle",
+        "Repeat",
+    ]
+
+
+def test_cursor_starts_on_library_when_idle():
+    display = FakeDisplay()
+    screen = make_ui(display)
+    screen.render_playback(FakeTrack(), "stopped", 0, 80)
+
+    screen.handle_action("home")
+
+    assert screen._stack[-1]["selected"] == 0
+
+
+def test_cursor_starts_on_queue_while_playing():
+    display = FakeDisplay()
+    screen = make_ui(display)
+    screen.render_playback(FakeTrack(), "playing", 0, 80)
+
+    screen.handle_action("home")
+
+    assert screen._stack[-1]["selected"] == 1
+
+
+def test_root_menu_shape_is_the_same_either_way():
+    playing = make_ui(FakeDisplay())
+    playing.render_playback(FakeTrack(), "playing", 0, 80)
+    playing.handle_action("home")
+
+    idle = make_ui(FakeDisplay())
+    idle.render_playback(FakeTrack(), "stopped", 0, 80)
+    idle.handle_action("home")
+
+    assert [i.name for i in playing._stack[-1]["items"]] == [
+        i.name for i in idle._stack[-1]["items"]
+    ]
+
+
+def test_selecting_library_opens_the_library():
+    display = FakeDisplay()
+    screen = make_ui(display)
+
+    open_library(screen)
+
+    assert screen._stack[-1]["title"] == ui.LIBRARY_TITLE
     assert [i.name for i in screen._stack[-1]["items"]] == ["Albums", "Artists"]
 
 
 def test_selection_moves_and_wraps():
     display = FakeDisplay()
     screen = make_ui(display)
-    screen.handle_action("home")
+    open_library(screen)
 
     screen.handle_action("down")
     assert screen._stack[-1]["selected"] == 1
 
-    # Only two entries at the root, so this wraps back to the top.
+    # Only two entries here, so this wraps back to the top.
     screen.handle_action("down")
     assert screen._stack[-1]["selected"] == 0
 
@@ -451,28 +525,35 @@ def test_selection_moves_and_wraps():
 def test_select_descends_into_a_directory():
     display = FakeDisplay()
     screen = make_ui(display)
-    screen.handle_action("home")
+    open_library(screen)
 
     screen.handle_action("select")
 
     assert screen._stack[-1]["title"] == "Albums"
-    assert len(screen._stack) == 2
 
 
 def test_back_pops_one_level():
     display = FakeDisplay()
     screen = make_ui(display)
-    screen.handle_action("home")
+    open_library(screen)
     screen.handle_action("select")
 
     screen.handle_action("back")
 
-    assert screen.in_menu
-    assert len(screen._stack) == 1
+    assert screen._stack[-1]["title"] == ui.LIBRARY_TITLE
+
+
+def test_back_from_the_library_returns_to_the_root():
+    display = FakeDisplay()
+    screen = make_ui(display)
+    open_library(screen)
+
+    screen.handle_action("back")
+
     assert screen._stack[-1]["title"] == ui.ROOT_TITLE
 
 
-def test_back_at_the_root_leaves_the_browser():
+def test_back_at_the_root_leaves_the_menu():
     display = FakeDisplay()
     screen = make_ui(display)
     screen.handle_action("home")
@@ -484,23 +565,117 @@ def test_back_at_the_root_leaves_the_browser():
 
 def test_selecting_a_track_queues_its_siblings_and_plays_it():
     display = FakeDisplay()
-    play = PlayRecorder()
-    screen = make_ui(display, play=play)
-    screen.handle_action("home")
+    player = FakePlayer()
+    screen = make_ui(display, player=player)
+    open_library(screen)
     screen.handle_action("select")  # Albums
     screen.handle_action("select")  # An Album
     screen.handle_action("down")  # second track
 
     screen.handle_action("select")
 
-    assert play.calls == [
+    assert player.played == [
         (["local:track:1", "local:track:2", "local:track:3"], "local:track:2")
     ]
-    # Picking a track hands the screen back to now-playing.
     assert not screen.in_menu
 
 
-def test_playback_does_not_paint_over_an_open_browser():
+def test_queue_view_lists_the_tracklist():
+    display = FakeDisplay()
+    player = FakePlayer(queue=[_TlTrack(1, "First"), _TlTrack(2, "Second")])
+    screen = make_ui(display, player=player)
+    screen.handle_action("home")
+    screen._stack[-1]["selected"] = 1
+
+    screen.handle_action("select")
+
+    assert screen._stack[-1]["title"] == ui.QUEUE_TITLE
+    assert [i.name for i in screen._stack[-1]["items"]] == ["First", "Second"]
+
+
+def test_selecting_a_queued_track_plays_it():
+    display = FakeDisplay()
+    player = FakePlayer(queue=[_TlTrack(7, "First"), _TlTrack(9, "Second")])
+    screen = make_ui(display, player=player)
+    screen.handle_action("home")
+    screen._stack[-1]["selected"] = 1
+    screen.handle_action("select")  # into the queue
+    screen.handle_action("down")
+
+    screen.handle_action("select")
+
+    assert player.played_tlids == [9]
+    assert not screen.in_menu
+
+
+def test_shuffle_row_shows_and_toggles_its_value():
+    display = FakeDisplay()
+    player = FakePlayer()
+    screen = make_ui(display, player=player)
+    screen.handle_action("home")
+    screen._stack[-1]["selected"] = 2
+    assert screen._stack[-1]["items"][2].value == "Off"
+
+    screen.handle_action("select")
+
+    assert player.options()["shuffle"] is True
+    # The row is rebuilt in place rather than navigating anywhere.
+    assert screen._stack[-1]["items"][2].value == "On"
+    assert screen._stack[-1]["title"] == ui.ROOT_TITLE
+
+
+def test_repeat_cycles_through_three_states():
+    display = FakeDisplay()
+    player = FakePlayer()
+    screen = make_ui(display, player=player)
+    screen.handle_action("home")
+    screen._stack[-1]["selected"] = 3
+
+    screen.handle_action("select")
+    assert player.options()["repeat"] == "all"
+
+    screen.handle_action("select")
+    assert player.options()["repeat"] == "one"
+
+    screen.handle_action("select")
+    assert player.options()["repeat"] == "off"
+
+
+def test_toggle_shuffle_action_works_outside_the_menu():
+    display = FakeDisplay()
+    player = FakePlayer()
+    screen = make_ui(display, player=player)
+    screen.render_playback(FakeTrack(), "playing", 0, 80)
+
+    screen.handle_action("toggle_shuffle")
+
+    assert player.options()["shuffle"] is True
+    assert not screen.in_menu
+
+
+def test_toggle_repeat_action_works_outside_the_menu():
+    display = FakeDisplay()
+    player = FakePlayer()
+    screen = make_ui(display, player=player)
+
+    screen.handle_action("toggle_repeat")
+
+    assert player.options()["repeat"] == "all"
+
+
+def test_returning_to_the_root_refreshes_its_values():
+    display = FakeDisplay()
+    player = FakePlayer()
+    screen = make_ui(display, player=player)
+    open_library(screen)
+    player.set_option("shuffle", True)
+
+    screen.handle_action("back")
+
+    assert screen._stack[-1]["items"][2].value == "On"
+
+
+def test_playback_does_not_paint_over_an_open_menu():
     display = FakeDisplay()
     screen = make_ui(display)
     screen.handle_action("home")
@@ -512,7 +687,7 @@ def test_playback_does_not_paint_over_an_open_browser():
     assert screen.in_menu
 
 
-def test_browser_closes_itself_after_the_timeout(clock):
+def test_menu_closes_itself_after_the_timeout(clock):
     display = FakeDisplay()
     screen = make_ui(display, menu_timeout=20)
     screen.handle_action("home")
@@ -525,7 +700,7 @@ def test_browser_closes_itself_after_the_timeout(clock):
     assert display.shows[-1] is True
 
 
-def test_browser_stays_open_before_the_timeout(clock):
+def test_menu_stays_open_before_the_timeout(clock):
     display = FakeDisplay()
     screen = make_ui(display, menu_timeout=20)
     screen.handle_action("home")
@@ -536,7 +711,7 @@ def test_browser_stays_open_before_the_timeout(clock):
     assert screen.in_menu
 
 
-def test_menu_timeout_zero_keeps_the_browser_open(clock):
+def test_menu_timeout_zero_keeps_the_menu_open(clock):
     display = FakeDisplay()
     screen = make_ui(display, menu_timeout=0)
     screen.handle_action("home")
@@ -559,25 +734,22 @@ def test_locked_panel_ignores_navigation():
     assert display.asleep
 
 
-def test_empty_directory_does_not_raise_on_select():
+def test_empty_listing_does_not_raise_on_select():
     display = FakeDisplay()
-    screen = make_ui(display, browse=lambda uri: [])
+    screen = make_ui(display, player=FakePlayer(library={}))
 
-    screen.handle_action("home")
+    open_library(screen)
     screen.handle_action("select")
     screen.handle_action("down")
 
     assert screen.in_menu
 
 
-def test_browse_failure_leaves_an_empty_menu_rather_than_raising():
-    def broken(uri):
-        raise RuntimeError("library is unavailable")
-
+def test_browse_failure_leaves_an_empty_listing_rather_than_raising():
     display = FakeDisplay()
-    screen = make_ui(display, browse=broken)
+    screen = make_ui(display, player=FakePlayer(browse_error=True))
 
-    screen.handle_action("home")
+    open_library(screen)
 
     assert screen.in_menu
     assert screen._stack[-1]["items"] == []

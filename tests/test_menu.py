@@ -80,3 +80,36 @@ def test_scroll_offset_never_runs_past_the_end():
 
 def test_scroll_offset_clamps_a_stale_previous_value():
     assert menu.scroll_offset(count=6, selected=0, previous=99) == 0
+
+
+class _Toggle:
+    def __init__(self, name, value):
+        self.name = name
+        self.value = value
+        self.type = "toggle"
+
+
+def test_toggle_rows_are_leaves_not_directories():
+    assert not menu.is_directory(_Toggle("Shuffle", "On"))
+
+
+def test_toggle_value_changes_the_rendering():
+    on = menu.render("Menu", [_Toggle("Shuffle", "On")])
+    off = menu.render("Menu", [_Toggle("Shuffle", "Off")])
+
+    assert on.tobytes() != off.tobytes()
+
+
+def test_toggle_row_renders_without_an_arrow():
+    toggle = menu.render("Menu", [_Toggle("Shuffle", "On")])
+    directory = menu.render("Menu", [_Ref("a", "Shuffle", "directory")])
+
+    assert toggle.tobytes() != directory.tobytes()
+
+
+def test_long_label_with_a_value_still_renders():
+    item = _Toggle("A setting with an unreasonably long name", "Off")
+
+    image = menu.render("Menu", [item])
+
+    assert image.size == (menu.WIDTH, menu.HEIGHT)
