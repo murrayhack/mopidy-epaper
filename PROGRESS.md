@@ -346,6 +346,9 @@ Mopidy's events stop queueing behind the SPI bus.
 The floor is still the panel — a partial refresh is a few hundred
 milliseconds and no setting changes that.
 
+**Verified on hardware 2026-08-23.** The interface feels markedly better
+with coalescing on; the web remote renders and drives the panel.
+
 ## Backlog
 
 Discussed and worth doing, not yet built:
