@@ -43,13 +43,14 @@ _OPENS_MENU = frozenset({"up", "down", "select", "home"})
 
 ROOT_TITLE = "Menu"
 LIBRARY_TITLE = "Library"
+PLAYLISTS_TITLE = "Playlists"
 QUEUE_TITLE = "Queue"
 
 #: Repeat cycles through these in order.
 REPEAT_STATES = ("off", "all", "one")
 
 _ROOT_LIBRARY = 0
-_ROOT_QUEUE = 1
+_ROOT_QUEUE = 2
 
 
 class Entry:
@@ -299,6 +300,7 @@ class Ui:
         repeat = str(options.get("repeat", "off")).capitalize()
         return [
             Entry(LIBRARY_TITLE, "directory", "library"),
+            Entry(PLAYLISTS_TITLE, "directory", "playlists"),
             Entry(QUEUE_TITLE, "directory", "queue"),
             Entry("Shuffle", "toggle", "shuffle", value="On" if options.get("shuffle") else "Off"),
             Entry("Repeat", "toggle", "repeat", value=repeat),
@@ -353,6 +355,42 @@ class Ui:
             logger.exception("Could not browse %s", uri)
             return []
 
+    def _open_playlists(self):
+        self._push("playlists", PLAYLISTS_TITLE, self._playlist_items())
+
+    def _playlist_items(self):
+        if self._player is None:
+            return []
+        try:
+            playlists = self._player.playlists()
+        except Exception:
+            logger.exception("Could not read playlists")
+            return []
+        return [
+            Entry(getattr(p, "name", None) or "?", "directory", "playlist", uri=p.uri)
+            for p in playlists
+        ]
+
+    def _open_playlist(self, uri, title):
+        # Opened as a library frame: the rows are tracks, so selecting one
+        # should queue its siblings exactly as it does elsewhere.
+        self._push("library", title, self._playlist_tracks(uri), uri=uri)
+
+    def _playlist_tracks(self, uri):
+        if self._player is None:
+            return []
+        try:
+            tracks = self._player.playlist_tracks(uri)
+        except Exception:
+            logger.exception("Could not read playlist %s", uri)
+            return []
+        # Playlists hand back Track models, which carry no "type" the menu can
+        # read, so wrap them rather than letting them look navigable.
+        return [
+            Entry(getattr(t, "name", None) or "?", "track", "playlist_track", uri=t.uri)
+            for t in tracks
+        ]
+
     def _open_queue(self):
         self._push("queue", QUEUE_TITLE, self._queue_items())
 
@@ -405,6 +443,8 @@ class Ui:
         frame = self._stack[-1]
         if frame["kind"] == "root":
             frame["items"] = self._root_items()
+        elif frame["kind"] == "playlists":
+            frame["items"] = self._playlist_items()
         elif frame["kind"] == "queue":
             frame["items"] = self._queue_items()
         count = len(frame["items"])
@@ -430,6 +470,8 @@ class Ui:
 
         if frame["kind"] == "root":
             self._select_root(item)
+        elif frame["kind"] == "playlists":
+            self._open_playlist(item.uri, item.name)
         elif frame["kind"] == "queue":
             self._select_queued(item)
         else:
@@ -438,6 +480,8 @@ class Ui:
     def _select_root(self, item):
         if item.action == "library":
             self._open_library(None, LIBRARY_TITLE)
+        elif item.action == "playlists":
+            self._open_playlists()
         elif item.action == "queue":
             self._open_queue()
         elif item.action == "shuffle":

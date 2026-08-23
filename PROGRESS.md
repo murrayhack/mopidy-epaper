@@ -273,6 +273,35 @@ The tests keep loose arguments through small helpers, since
 `render(track, "playing", 5000, 80)` reads better in a test than building
 a dataclass on every line.
 
+## Playlists (2026-08-23, unverified)
+
+The menu gained a Playlists row. Mopidy keeps playlists behind
+`core.playlists`, entirely separate from `core.library.browse()`, so they
+were unreachable from the panel before this — nothing in the extension
+had ever called that API.
+
+One trap worth recording: `core.playlists.lookup()` returns `Track`
+models, which carry no `type` attribute. `menu.is_directory()` reads
+`type` and treats anything that is not a known leaf as navigable, so
+unwrapped playlist tracks would have drawn arrows and tried to descend
+into themselves. They are wrapped in `Entry` objects with an explicit
+`type="track"`, the same way queue rows are.
+
+Playlist tracks open as a `library` frame rather than a kind of their
+own, so selecting one queues its siblings exactly as it does elsewhere.
+
+**Verified on hardware 2026-08-23.** Playlists list, open, and selecting
+a track queues the playlist. The tracks render without directory arrows,
+confirming the `Entry` wrapping holds.
+
+Note on where playlists live: `[m3u] playlists_dir` is a Mopidy setting,
+unset by default, so playlists land in the extension's data dir rather
+than beside the music. Pointing it at the media directory works, with
+`base_dir` set alongside it so relative paths inside the files resolve.
+Doing so makes mopidy-local try to scan the m3u file as audio and log a
+harmless warning; `[local] excluded_file_extensions` silences it, but
+that setting replaces the default list rather than extending it.
+
 ## Known limitations / deferred
 
 - **Radio stream titles don't update.** For a stream, the track URI and

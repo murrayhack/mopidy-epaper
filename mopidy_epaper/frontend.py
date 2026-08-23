@@ -50,6 +50,14 @@ class MopidyPlayer:
                 return tl_track.tlid
         return None
 
+    def playlists(self):
+        """Saved playlists. Separate from library browsing in Mopidy."""
+        return self._core.playlists.as_list().get()
+
+    def playlist_tracks(self, uri):
+        playlist = self._core.playlists.lookup(uri).get()
+        return list(playlist.tracks) if playlist else []
+
     def queue(self):
         return self._core.tracklist.get_tl_tracks().get()
 
