@@ -273,6 +273,28 @@ The tests keep loose arguments through small helpers, since
 `render(track, "playing", 5000, 80)` reads better in a test than building
 a dataclass on every line.
 
+## Playlists (2026-08-23, unverified)
+
+The menu gained a Playlists row. Mopidy keeps playlists behind
+`core.playlists`, entirely separate from `core.library.browse()`, so they
+were unreachable from the panel before this — nothing in the extension
+had ever called that API.
+
+One trap worth recording: `core.playlists.lookup()` returns `Track`
+models, which carry no `type` attribute. `menu.is_directory()` reads
+`type` and treats anything that is not a known leaf as navigable, so
+unwrapped playlist tracks would have drawn arrows and tried to descend
+into themselves. They are wrapped in `Entry` objects with an explicit
+`type="track"`, the same way queue rows are.
+
+Playlist tracks open as a `library` frame rather than a kind of their
+own, so selecting one queues its siblings exactly as it does elsewhere.
+
+**Not yet run on hardware, and there is no test data.**
+`core.playlists.as_list()` returned `[]` before this was written, so an
+empty Playlists row is the expected output until an m3u file exists.
+Create one in `~/.local/share/mopidy/m3u/` to verify properly.
+
 ## Known limitations / deferred
 
 - **Radio stream titles don't update.** For a stream, the track URI and

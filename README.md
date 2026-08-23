@@ -158,9 +158,10 @@ Zero, and the request must not hold up Mopidy's web server while it happens.
 `home` — or any navigation action — opens the menu:
 
 ```
-Menu                  2/4
+Menu                  3/5
 -------------------------
   Library            >
+  Playlists          >
  [Queue              >]
   Shuffle:         Off
   Repeat:          Off
@@ -174,6 +175,10 @@ one press away without the same button leading somewhere different each time.
 backends are enabled show up in it. Selecting a track queues every track listed
 alongside it and starts at the one picked, so choosing a song from an album
 plays the album rather than stopping after one track.
+
+**Playlists** lists saved playlists. In Mopidy these live behind a separate API
+from library browsing, so they do not appear anywhere under **Library** — an
+empty list here means no playlists are saved, not that anything is broken.
 
 **Queue** lists the current tracklist; selecting a row jumps straight to it.
 

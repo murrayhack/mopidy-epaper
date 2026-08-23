@@ -2,7 +2,7 @@ import time
 
 import pytest
 
-from mopidy_epaper import ui
+from mopidy_epaper import menu, ui
 from mopidy_epaper.playback import Playback
 
 
@@ -89,11 +89,22 @@ class _TlTrack:
 class FakePlayer:
     """Stands in for frontend.MopidyPlayer."""
 
-    def __init__(self, library=None, queue=None, browse_error=False):
+    def __init__(
+        self,
+        library=None,
+        queue=None,
+        browse_error=False,
+        playlists=None,
+        playlist_tracks=None,
+        playlists_error=False,
+    ):
         self.library = LIBRARY if library is None else library
         self._queue = queue if queue is not None else []
+        self._playlists = playlists if playlists is not None else []
+        self._playlist_tracks = playlist_tracks or {}
         self._options = {"shuffle": False, "repeat": "off"}
         self.browse_error = browse_error
+        self.playlists_error = playlists_error
         self.played = []
         self.played_tlids = []
 
@@ -104,6 +115,14 @@ class FakePlayer:
 
     def play(self, uris, start_uri):
         self.played.append((uris, start_uri))
+
+    def playlists(self):
+        if self.playlists_error:
+            raise RuntimeError("playlists are unavailable")
+        return list(self._playlists)
+
+    def playlist_tracks(self, uri):
+        return list(self._playlist_tracks.get(uri, []))
 
     def queue(self):
         return self._queue
@@ -475,6 +494,7 @@ def test_root_menu_has_a_fixed_shape():
     assert screen._stack[-1]["title"] == ui.ROOT_TITLE
     assert [i.name for i in screen._stack[-1]["items"]] == [
         "Library",
+        "Playlists",
         "Queue",
         "Shuffle",
         "Repeat",
@@ -498,7 +518,8 @@ def test_cursor_starts_on_queue_while_playing():
 
     screen.handle_action("home")
 
-    assert screen._stack[-1]["selected"] == 1
+    selected = screen._stack[-1]["selected"]
+    assert screen._stack[-1]["items"][selected].name == ui.QUEUE_TITLE
 
 
 def test_root_menu_shape_is_the_same_either_way():
@@ -604,7 +625,7 @@ def test_queue_view_lists_the_tracklist():
     player = FakePlayer(queue=[_TlTrack(1, "First"), _TlTrack(2, "Second")])
     screen = make_ui(display, player=player)
     screen.handle_action("home")
-    screen._stack[-1]["selected"] = 1
+    screen._stack[-1]["selected"] = ui._ROOT_QUEUE
 
     screen.handle_action("select")
 
@@ -617,7 +638,7 @@ def test_selecting_a_queued_track_plays_it():
     player = FakePlayer(queue=[_TlTrack(7, "First"), _TlTrack(9, "Second")])
     screen = make_ui(display, player=player)
     screen.handle_action("home")
-    screen._stack[-1]["selected"] = 1
+    screen._stack[-1]["selected"] = ui._ROOT_QUEUE
     screen.handle_action("select")  # into the queue
     screen.handle_action("down")
 
@@ -632,14 +653,14 @@ def test_shuffle_row_shows_and_toggles_its_value():
     player = FakePlayer()
     screen = make_ui(display, player=player)
     screen.handle_action("home")
-    screen._stack[-1]["selected"] = 2
-    assert screen._stack[-1]["items"][2].value == "Off"
+    screen._stack[-1]["selected"] = 3
+    assert screen._stack[-1]["items"][3].value == "Off"
 
     screen.handle_action("select")
 
     assert player.options()["shuffle"] is True
     # The row is rebuilt in place rather than navigating anywhere.
-    assert screen._stack[-1]["items"][2].value == "On"
+    assert screen._stack[-1]["items"][3].value == "On"
     assert screen._stack[-1]["title"] == ui.ROOT_TITLE
 
 
@@ -648,7 +669,7 @@ def test_repeat_cycles_through_three_states():
     player = FakePlayer()
     screen = make_ui(display, player=player)
     screen.handle_action("home")
-    screen._stack[-1]["selected"] = 3
+    screen._stack[-1]["selected"] = 4
 
     screen.handle_action("select")
     assert player.options()["repeat"] == "all"
@@ -691,7 +712,7 @@ def test_returning_to_the_root_refreshes_its_values():
 
     screen.handle_action("back")
 
-    assert screen._stack[-1]["items"][2].value == "On"
+    assert screen._stack[-1]["items"][3].value == "On"
 
 
 def test_playback_does_not_paint_over_an_open_menu():
@@ -824,3 +845,103 @@ def test_status_key_covers_mute():
     assert ui.status_key(Playback(**common, muted=False)) != ui.status_key(
         Playback(**common, muted=True)
     )
+
+
+_ROOT_PLAYLISTS = 1
+
+
+def open_playlists(screen):
+    screen.handle_action("home")
+    screen._stack[-1]["selected"] = _ROOT_PLAYLISTS
+    screen.handle_action("select")
+
+
+def playlist_player():
+    return FakePlayer(
+        playlists=[_Ref("m3u:Road.m3u", "Road Trip", "playlist")],
+        playlist_tracks={
+            "m3u:Road.m3u": [
+                _Ref("local:track:1", "First"),
+                _Ref("local:track:2", "Second"),
+            ]
+        },
+    )
+
+
+def test_root_menu_offers_playlists():
+    screen = make_ui(FakeDisplay())
+
+    screen.handle_action("home")
+
+    names = [i.name for i in screen._stack[-1]["items"]]
+    assert names.index(ui.PLAYLISTS_TITLE) == _ROOT_PLAYLISTS
+
+
+def test_playlists_are_listed():
+    screen = make_ui(FakeDisplay(), player=playlist_player())
+
+    open_playlists(screen)
+
+    assert screen._stack[-1]["title"] == ui.PLAYLISTS_TITLE
+    assert [i.name for i in screen._stack[-1]["items"]] == ["Road Trip"]
+
+
+def test_opening_a_playlist_lists_its_tracks():
+    screen = make_ui(FakeDisplay(), player=playlist_player())
+    open_playlists(screen)
+
+    screen.handle_action("select")
+
+    assert screen._stack[-1]["title"] == "Road Trip"
+    assert [i.name for i in screen._stack[-1]["items"]] == ["First", "Second"]
+
+
+def test_playlist_tracks_are_leaves_not_directories():
+    # Playlists hand back Track models with no "type", which would otherwise
+    # look navigable and draw an arrow.
+    screen = make_ui(FakeDisplay(), player=playlist_player())
+    open_playlists(screen)
+    screen.handle_action("select")
+
+    assert all(not menu.is_directory(i) for i in screen._stack[-1]["items"])
+
+
+def test_selecting_a_playlist_track_queues_the_whole_playlist():
+    player = playlist_player()
+    screen = make_ui(FakeDisplay(), player=player)
+    open_playlists(screen)
+    screen.handle_action("select")
+    screen.handle_action("down")
+
+    screen.handle_action("select")
+
+    assert player.played == [(["local:track:1", "local:track:2"], "local:track:2")]
+    assert not screen.in_menu
+
+
+def test_back_from_a_playlist_returns_to_the_list():
+    screen = make_ui(FakeDisplay(), player=playlist_player())
+    open_playlists(screen)
+    screen.handle_action("select")
+
+    screen.handle_action("back")
+
+    assert screen._stack[-1]["title"] == ui.PLAYLISTS_TITLE
+
+
+def test_no_playlists_renders_an_empty_list_rather_than_failing():
+    screen = make_ui(FakeDisplay(), player=FakePlayer(playlists=[]))
+
+    open_playlists(screen)
+
+    assert screen._stack[-1]["title"] == ui.PLAYLISTS_TITLE
+    assert screen._stack[-1]["items"] == []
+
+
+def test_playlist_failure_leaves_an_empty_list_rather_than_raising():
+    screen = make_ui(FakeDisplay(), player=FakePlayer(playlists_error=True))
+
+    open_playlists(screen)
+
+    assert screen.in_menu
+    assert screen._stack[-1]["items"] == []
