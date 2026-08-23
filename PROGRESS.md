@@ -290,10 +290,17 @@ into themselves. They are wrapped in `Entry` objects with an explicit
 Playlist tracks open as a `library` frame rather than a kind of their
 own, so selecting one queues its siblings exactly as it does elsewhere.
 
-**Not yet run on hardware, and there is no test data.**
-`core.playlists.as_list()` returned `[]` before this was written, so an
-empty Playlists row is the expected output until an m3u file exists.
-Create one in `~/.local/share/mopidy/m3u/` to verify properly.
+**Verified on hardware 2026-08-23.** Playlists list, open, and selecting
+a track queues the playlist. The tracks render without directory arrows,
+confirming the `Entry` wrapping holds.
+
+Note on where playlists live: `[m3u] playlists_dir` is a Mopidy setting,
+unset by default, so playlists land in the extension's data dir rather
+than beside the music. Pointing it at the media directory works, with
+`base_dir` set alongside it so relative paths inside the files resolve.
+Doing so makes mopidy-local try to scan the m3u file as audio and log a
+harmless warning; `[local] excluded_file_extensions` silences it, but
+that setting replaces the default list rather than extending it.
 
 ## Known limitations / deferred
 

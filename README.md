@@ -180,6 +180,13 @@ plays the album rather than stopping after one track.
 from library browsing, so they do not appear anywhere under **Library** — an
 empty list here means no playlists are saved, not that anything is broken.
 
+Where Mopidy looks for them is its own setting, not this extension's:
+`[m3u] playlists_dir` is unset by default, so playlists live in that
+extension's data directory. Pointing it at your media directory keeps
+playlists beside the music; set `base_dir` too so relative paths inside the
+files resolve. Use the `.m3u8` extension for anything with non-ASCII track
+names, since plain `.m3u` is read as latin-1.
+
 **Queue** lists the current tracklist; selecting a row jumps straight to it.
 
 **Shuffle** and **Repeat** flip in place rather than navigating anywhere.
