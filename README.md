@@ -5,7 +5,9 @@ information — title, artist, album, progress, queue position and volume — on
 Waveshare 2.13" V4 e-paper display attached to a Raspberry Pi Zero.
 
 The status strip carries the progress bar, elapsed and total time, play state,
-where the track sits in the queue, and the volume.
+where the track sits in the queue, and the volume. Muting slashes through the
+speaker rather than hiding the level, so you can see what unmuting will return
+to.
 
 E-paper is slow to refresh, so the extension splits updates in two: the whole
 screen is redrawn (a full, flashing refresh) only when the track changes, while

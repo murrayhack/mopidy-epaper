@@ -229,6 +229,28 @@ convenience, no unpredictability.
 the right-aligned values read well at font size 14. No redraw problem was
 reported when flipping a setting.
 
+## Queue position and volume icon (2026-08-23)
+
+The now-playing status strip gained an `n/total` queue counter and a
+drawn speaker glyph in place of the words "vol".
+
+Placement of the counter was decided by collisions: not in the header,
+because the title line already truncates and taking width from it makes
+that worse; and right-aligned rather than centred, because a long
+elapsed/total pair such as `1:02:05 / 1:15:30` reaches past the middle of
+the panel. There are tests for both.
+
+Muting was a silent no-op before this. `mute_changed` triggered a
+refresh, but `get_volume()` still reports the level while muted, so the
+screen redrew identically. The speaker glyph now carries a slash, and
+`muted` joined `status_key` so the redraw actually happens. The level
+stays visible so you can see what unmuting will return to.
+
+**Candidate refactor:** `layout.render` now takes ten parameters and
+`render_playback` seven. A small playback-state value object would read
+better than threading each new field through three call sites. Not urgent,
+but the next field added should probably trigger it.
+
 ## Known limitations / deferred
 
 - **Radio stream titles don't update.** For a stream, the track URI and
