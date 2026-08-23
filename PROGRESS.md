@@ -225,9 +225,9 @@ convenience, no unpredictability.
   injected adapter, instead of loose callables passed to `Ui`. The state
   machine still imports no Mopidy.
 
-**Not yet run on hardware.** Worth checking that the values on the
-Shuffle and Repeat rows are legible right-aligned at this font size, and
-that toggling redraws the row without a distracting full-screen flash.
+**Verified on hardware 2026-08-23.** The toggles work from the menu and
+the right-aligned values read well at font size 14. No redraw problem was
+reported when flipping a setting.
 
 ## Known limitations / deferred
 
