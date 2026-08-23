@@ -381,8 +381,9 @@ mean a full read and draw. Now it is one of each.
 The `_refresh_lock` is gone with it. Reading and rendering are atomic
 because one thread does both, rather than because a lock says so.
 
-**Not measured, only reasoned.** Worth timing on the Pi if it matters:
-the wins should be most visible on track changes and while idle.
+**Verified on hardware 2026-08-24** as behaviour-preserving, which was
+the whole intent. Not benchmarked — the wins are structural and were
+reasoned rather than measured.
 
 ## Backlog
 
