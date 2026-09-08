@@ -452,7 +452,21 @@ is the only path that exercises the change. Pausing until the panel
 slept and then resuming gives `Panel awake` and a full refresh, so the
 reopen works.
 
-The fd-leak guard is not verified; it needs a long session to show.
+The fd-leak guard is verified too, and it did not need a long session
+after all — full refreshes are what would leak, and a track change
+forces one. Five in a row left
+`ls -l /proc/$(pgrep -f mopidy)/fd | grep -c spidev` at 1, where the
+unguarded path would have reached 6. It reads 0 while the panel sleeps,
+since `epd.sleep()` closes the descriptor, so the open and close are
+properly paired.
+
+That proves the current code does not leak. It does not prove py-spidev
+*would* leak without the guard — testing that would mean reverting it,
+which is not worth doing for a change that costs nothing.
+
+The same listing is a second way to see `pwr_pin` working:
+`anon_inode:gpio-line` appears three times, for RST, DC and BUSY. With
+GPIO 18 still claimed it would be four.
 
 ## Backlog
 
