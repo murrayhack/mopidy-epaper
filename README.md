@@ -31,6 +31,54 @@ The Waveshare driver for this panel revision is vendored into
 `mopidy_epaper/drivers/` — see [NOTICE](NOTICE). The `waveshare-epaper` package
 on PyPI predates the V4 revision and does not include it.
 
+### Wiring it without the HAT
+
+Sitting the board on the 40-pin header is the easy case. If you need the header
+for something else — an I2S DAC, say — the panel can be wired with jumpers
+instead, but it needs more than its signal pins:
+
+| Signal | BCM | Physical pin |
+| --- | --- | --- |
+| 3.3V | — | 1 |
+| **5V** | — | **2** |
+| GND | — | 6 (and a second, e.g. 9) |
+| RST | 17 | 11 |
+| PWR | 18 | 12 (see below) |
+| BUSY | 24 | 18 |
+| MOSI | 10 | 19 |
+| DC | 25 | 22 |
+| SCLK | 11 | 23 |
+| CS | 8 | 24 |
+
+**5V is not optional, and leaving it out fails silently.** 3.3V powers the
+controller, but the ±15V charge pump that actually moves the pigment runs off
+5V. Without it the panel initialises cleanly, reports BUSY correctly, and runs
+full refresh cycles that take the usual couple of seconds — and not a single
+pixel changes. Nothing logs a warning, because the controller is doing exactly
+what it was asked.
+
+Both ends use the *same physical pin number*, which is where this usually goes
+wrong: BUSY is GPIO 24 on **pin 18**, and PWR is GPIO 18 on **pin 12**.
+
+`PWR` gates the panel supply on board revisions that have that circuit; on
+others the pin is unconnected and the panel runs on 3.3V and 5V alone. If yours
+does not need it, set `pwr_pin =` (see below) rather than wiring it, which
+frees GPIO 18.
+
+Keep the jumpers short. The bus runs at 4 MHz, and long dupont wire is a
+plausible cause of a panel that initialises and then shows nothing.
+
+### Sharing the header with an I2S DAC
+
+I2S needs GPIO 18 (BCLK), 19 (LRCLK) and 21 (DATA), and those are fixed in the
+SoC's pinmux — they cannot be moved. GPIO 18 is also this driver's default PWR
+pin, so the two collide, and the collision is quiet: claiming the pin pulls it
+out of ALT0 and breaks audio rather than raising anything.
+
+Set `pwr_pin =` to keep the driver off GPIO 18 entirely. Do it before adding
+the DAC overlay — the extension claims the pin when it starts, whichever order
+you set things up in.
+
 ## Installation
 
 ### Raspberry Pi OS (Trixie / Debian 13)
@@ -84,6 +132,7 @@ idle_screen = keep
 menu_timeout = 20
 web_remote = true
 input_coalesce_ms = 80
+pwr_pin = 18
 dummy_output_path =
 ```
 
@@ -97,6 +146,7 @@ dummy_output_path =
 | `menu_timeout` | Seconds without input before the library browser closes itself. `0` keeps it open. |
 | `web_remote` | Serve the remote page at `/epaper/`. `false` serves the JSON action listing there instead. |
 | `input_coalesce_ms` | How long to gather further presses before drawing, so a burst of them costs one refresh instead of several. `0` draws on every press. |
+| `pwr_pin` | GPIO the panel's power gate hangs off. Leave it empty to claim no pin at all, which boards without that circuit want — and which an I2S DAC on GPIO 18 requires. |
 | `dummy_output_path` | Where the `dummy` driver writes its PNG. Defaults to `/tmp/mopidy-epaper.png`. |
 
 Confirm the extension is loaded with `mopidy deps list`.
@@ -244,8 +294,9 @@ rather than anything here. It maps pins to transport actions entirely through
 `mopidy.conf` and is a solved problem.
 
 Whatever you wire up, avoid the pins the e-paper HAT already occupies: **RST
-17, DC 25, CS 8, BUSY 24, PWR 18**, plus SPI on **10** and **11**. A collision
-there fails confusingly.
+17, DC 25, CS 8, BUSY 24**, plus SPI on **10** and **11**, and **PWR 18**
+unless you have freed it with `pwr_pin =`. A collision there fails
+confusingly.
 
 ## Driving it by hand
 
