@@ -286,7 +286,12 @@ returns the vocabulary.
 
 `examples/gpio_buttons.py` is a working example that maps GPIO pins to these
 actions with `gpiozero`. It is a starting point to copy, not part of the
-package.
+package, and it is meant to stay minimal.
+
+For a complete player — buttons, volume, transport, a DAC and a systemd unit —
+see the **paperpod** repository. It drives this API from the outside,
+which is the intended shape: this extension owns the panel and its navigation,
+and everything physical lives there.
 
 For playback control — play/pause, next, previous, volume — use
 [mopidy-raspberry-gpio](https://github.com/pimoroni/mopidy-raspberry-gpio)

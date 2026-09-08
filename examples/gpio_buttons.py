@@ -7,8 +7,13 @@ request can drive it. Copy this, change the pins, run it alongside Mopidy.
 
     python3 examples/gpio_buttons.py
 
+It is meant to stay this small — enough to show what the API expects. For a
+whole player, with volume, transport, mode-aware buttons and a systemd unit,
+see the paperpod repository, which drives this API from the outside.
+
 Transport controls (play/pause, next, previous, volume) are a solved problem —
-use mopidy-raspberry-gpio for those. This is only for driving the panel.
+use mopidy-raspberry-gpio for those, or Mopidy's JSON-RPC API directly. This is
+only for driving the panel.
 
 The pins below avoid the ones the e-paper HAT already occupies: RST 17, DC 25,
 CS 8, BUSY 24, PWR 18, plus SPI on 10 and 11. A collision there fails in

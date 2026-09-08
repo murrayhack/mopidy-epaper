@@ -458,10 +458,6 @@ Discussed and worth doing, not yet built:
 - **Append vs replace.** Selecting a track calls `tracklist.clear()`
   first, so there is no way to add to a queue that is already playing. An
   `enqueue` action alongside `select` would fix it.
-- **Seek and volume actions.** `seek_forward` / `seek_back` by 30s, and
-  `volume_up` / `volume_down`. The API currently carries shuffle and
-  repeat but not volume, which is a little inconsistent — transport was
-  deferred to mopidy-raspberry-gpio.
 
 ## Known limitations / deferred
 
@@ -476,6 +472,28 @@ Discussed and worth doing, not yet built:
   framebuffer. Whether text ends up upright depends on how the HAT is
   physically mounted — if it's upside down, rotate 180° in `layout.render`.
 - No album art (1-bit, small panel), no button input.
+- **Volume, seek and transport are deliberately not here** (decided
+  2026-09-08). They were briefly in the backlog as `volume_up` /
+  `volume_down` and `seek_forward` / `seek_back`, on the grounds that the
+  API carrying shuffle and repeat but not volume was inconsistent. The
+  inconsistency is real but the fix is the wrong one: this extension owns
+  the panel and its navigation, and Mopidy already owns the mixer and the
+  tracklist behind JSON-RPC. Adding a second route to the mixer would
+  mean two ways to do one thing, and a growing surface with no natural
+  edge — seek next, then playlists-by-name, then everything.
+
+  The physical player is a separate concern and gets a separate repo: a
+  button daemon that maps GPIO to `POST /epaper/input/<action>` for
+  navigation and to `/mopidy/rpc` for volume and transport. Nothing here
+  needs to change for that to work — the panel already redraws on
+  `volume_changed`, so it displays a volume it does not control, which is
+  the correct division.
+
+  The one cost: a daemon that wants up/down to mean volume on the
+  now-playing screen and navigation in the menu has to know which is
+  showing. `GET /epaper/status` reports `in_menu`, but it waits on the
+  actor, which a full refresh can hold for a couple of seconds. Poll it
+  on a timer and cache it rather than querying per press.
 
 ## Next steps
 
