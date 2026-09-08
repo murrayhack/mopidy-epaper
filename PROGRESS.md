@@ -445,6 +445,13 @@ running* — the pin stays with I2S instead of being claimed as an output.
 That is the whole point of the change, and it is the reading that would
 have been `op` before it.
 
+Sleep and wake are verified too, which was the part worth checking: the
+stand-in opens SPI once instead of on every `module_init`, so
+`epd.sleep()` → `module_exit()` → close, then a later `init()` → reopen,
+is the only path that exercises the change. Pausing until the panel
+slept and then resuming gives `Panel awake` and a full refresh, so the
+reopen works.
+
 The fd-leak guard is not verified; it needs a long session to show.
 
 ## Backlog
