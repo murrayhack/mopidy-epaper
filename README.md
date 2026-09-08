@@ -141,7 +141,7 @@ dummy_output_path =
 | `driver` | `epd2in13_v4` for the real panel, or `dummy` to render PNG frames to disk instead. |
 | `update_interval` | Seconds between progress-bar refreshes while playing. |
 | `full_refresh_every` | Partial refreshes allowed before forcing a full refresh to clear ghosting. |
-| `sleep_after` | Seconds of stopped playback before the panel is put to sleep. `0` disables it. |
+| `sleep_after` | Seconds without playback — paused or stopped — before the panel is put to sleep. `0` disables it. |
 | `idle_screen` | `keep` leaves the last frame on the panel when it sleeps, `blank` clears it first. |
 | `menu_timeout` | Seconds without input before the library browser closes itself. `0` keeps it open. |
 | `web_remote` | Serve the remote page at `/epaper/`. `false` serves the JSON action listing there instead. |
@@ -155,9 +155,10 @@ Confirm the extension is loaded with `mopidy deps list`.
 
 E-paper holds its image with no power at all, which shapes how this works.
 
-When playback has been stopped for `sleep_after` seconds the panel controller
-is powered down, leaving whatever was last drawn still visible. Playback wakes
-it again. Waking re-initialises the controller, so the first frame after a wake
+When playback has not been running for `sleep_after` seconds the panel
+controller is powered down, leaving whatever was last drawn still visible.
+Paused counts as well as stopped — anything that is not playing starts the
+timer. Playback wakes it again. Waking re-initialises the controller, so the first frame after a wake
 is always a full refresh.
 
 The panel can also be locked, like the hold switch on an old MP3 player. A
@@ -286,7 +287,12 @@ returns the vocabulary.
 
 `examples/gpio_buttons.py` is a working example that maps GPIO pins to these
 actions with `gpiozero`. It is a starting point to copy, not part of the
-package.
+package, and it is meant to stay minimal.
+
+For a complete player — buttons, volume, transport, a DAC and a systemd unit —
+see the **paperpod** repository. It drives this API from the outside,
+which is the intended shape: this extension owns the panel and its navigation,
+and everything physical lives there.
 
 For playback control — play/pause, next, previous, volume — use
 [mopidy-raspberry-gpio](https://github.com/pimoroni/mopidy-raspberry-gpio)
@@ -329,7 +335,7 @@ curl -s -d '{"jsonrpc":"2.0","id":1,"method":"core.tracklist.clear"}' \
 
 ### Testing sleep and wake
 
-Set `sleep_after = 20` so you are not waiting five minutes, then play, stop,
+Set `sleep_after = 20` so you are not waiting five minutes, then play, pause,
 and wait. Mopidy logs each transition at info level — `Panel idle for 20s,
 sleeping`, then `Panel awake` when playback resumes.
 
