@@ -37,8 +37,15 @@ class EpaperDisplay:
             self._dummy_path = config.get("dummy_output_path") or DEFAULT_DUMMY_PATH
             logger.info("e-paper dummy driver rendering to %s", self._dummy_path)
         elif self._driver_name == "epd2in13_v4":
-            # Imported lazily: epdconfig runs hardware detection at import time
-            # and raises on anything that is not a Raspberry Pi.
+            # Imported lazily: the vendored epdconfig runs hardware detection
+            # at import time and raises on anything that is not a Raspberry Pi.
+            # hardware.install() must come first — it stands in for that module
+            # before the driver can import it, which is the only point at which
+            # the PWR pin can still be changed or left alone.
+            from . import hardware
+
+            hardware.install(pwr_pin=config.get("pwr_pin", hardware.PWR_PIN))
+
             from .drivers import epd2in13_V4
 
             self._epd = epd2in13_V4.EPD()

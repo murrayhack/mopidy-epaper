@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- `pwr_pin` config option. The vendored Waveshare driver hardcodes the
+  panel's power-gate pin to GPIO 18, which is also I2S BCLK — so a Pi
+  with an I2S DAC could not run both. Leave it empty to claim no pin,
+  which is also what boards without a power gate want. Defaults to 18,
+  so nothing changes for a HAT-mounted panel.
+- Documented wiring the panel off the 40-pin header. It needs **5V** as
+  well as 3.3V: the controller runs on 3.3V but the charge pump that
+  drives the pigment does not, and omitting it produces a panel that
+  initialises, reports ready, and never changes.
+
 ## v1.0.0 — 2026-08-24
 
 First release. Every feature below has been exercised on the target

@@ -385,6 +385,61 @@ because one thread does both, rather than because a lock says so.
 the whole intent. Not benchmarked — the wins are structural and were
 reasoned rather than measured.
 
+## Off the HAT: 5V, and freeing GPIO 18 (2026-09-08)
+
+The panel was taken off the 40-pin header and wired with jumpers, to
+free the header for an I2S DAC (a PCM5100A). It stopped displaying
+anything, and finding out why turned up two things worth recording.
+
+**The 5V rail is what was missing, and its absence is invisible.**
+Verified by bisecting the failure on hardware: 3.3V powers the
+controller, but the ±15V charge pump that moves the pigment runs off 5V.
+With only 3.3V connected, every single diagnostic passed — `epd.init()`
+returned in 60ms, BUSY was driven correctly and readable in both
+directions against `pinctrl` pulls, a hardware reset brought the panel
+out of deep sleep, and a full `display()` blocked for 2.33s, which is a
+real refresh cycle rather than a no-op. The screen kept the frame it had
+been showing since it was last on the HAT. Nothing in the stack can
+detect this: the driver only ever writes, there is no MISO, and BUSY
+behaves normally because the controller itself is fine.
+
+Documented in the README as a wiring table, since it is only invisible
+until you leave the header.
+
+**GPIO 18 cannot be shared with I2S, and losing it is silent too.**
+I2S needs GPIO 18 (BCLK), 19 and 21, fixed in the SoC's pinmux. The
+vendored `epdconfig` hardcodes `PWR_PIN = 18` and claims it with
+gpiozero at module scope, so *importing* the module takes the pin —
+pulling it out of ALT0 and breaking audio rather than raising. Patching
+after the import cannot help: closing the pin does not hand the pinmux
+back.
+
+So `mopidy_epaper/hardware.py` now stands in for the vendored module. It
+implements the eleven names `epd2in13_V4` actually reads and installs
+itself into `sys.modules` under `mopidy_epaper.drivers.epdconfig` before
+the driver is imported, so the stock one never executes. `drivers/`
+stays verbatim. A test parses the driver source for `epdconfig.<name>`
+references and fails if a future vendored update reaches for something
+we do not provide.
+
+`pwr_pin` config option, defaulting to 18 so HAT users are unaffected;
+leave it empty to claim no pin at all. The panel on this Pi ran through
+the entire debugging session with GPIO 18 unconnected, so that board has
+no power gate and does not need it.
+
+**Incidental find, unverified:** `module_init` opens SPI on every call,
+and `display._show_full` calls `epd.init()` before every full refresh.
+py-spidev's `open()` assigns over `self->fd` without closing the
+descriptor it replaces, so that leaks one fd per full refresh — roughly
+288 a day at the default 5s interval and `full_refresh_every = 60`,
+before track changes. The stand-in opens once and reopens only after
+`module_exit`. Not confirmed against a real py-spidev build; the guard
+is cheap either way. Worth checking with
+`ls /proc/$(pgrep -f mopidy)/fd | wc -l` over a long session.
+
+**Written 2026-09-08, unverified.** The 5V finding is confirmed on
+hardware; the code change is not — it has not run on the Pi.
+
 ## Backlog
 
 Discussed and worth doing, not yet built:

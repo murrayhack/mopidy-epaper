@@ -23,6 +23,10 @@ class Extension(ext.Extension):
         schema["menu_timeout"] = config.Integer(minimum=0)
         schema["web_remote"] = config.Boolean()
         schema["input_coalesce_ms"] = config.Integer(minimum=0)
+        # Optional: leave it unset to keep the driver off that GPIO entirely,
+        # which is what a panel with no power gate — or a Pi with an I2S DAC
+        # on GPIO 18 — needs.
+        schema["pwr_pin"] = config.Integer(optional=True, minimum=0, maximum=27)
         schema["dummy_output_path"] = config.Path(optional=True)
         return schema
 
