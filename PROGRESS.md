@@ -437,8 +437,15 @@ before track changes. The stand-in opens once and reopens only after
 is cheap either way. Worth checking with
 `ls /proc/$(pgrep -f mopidy)/fd | wc -l` over a long session.
 
-**Written 2026-09-08, unverified.** The 5V finding is confirmed on
-hardware; the code change is not — it has not run on the Pi.
+**Verified on hardware 2026-09-08.** 133 tests pass on the Pi. With
+`pwr_pin =` set and `dtoverlay=hifiberry-dac` loaded, the panel still
+does full refreshes on a track change and partials on the progress tick,
+and `pinctrl get 18` reads `a0 // GPIO18 = PCM_CLK` *while Mopidy is
+running* — the pin stays with I2S instead of being claimed as an output.
+That is the whole point of the change, and it is the reading that would
+have been `op` before it.
+
+The fd-leak guard is not verified; it needs a long session to show.
 
 ## Backlog
 
