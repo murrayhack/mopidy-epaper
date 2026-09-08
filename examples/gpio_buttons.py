@@ -16,8 +16,11 @@ use mopidy-raspberry-gpio for those, or Mopidy's JSON-RPC API directly. This is
 only for driving the panel.
 
 The pins below avoid the ones the e-paper HAT already occupies: RST 17, DC 25,
-CS 8, BUSY 24, PWR 18, plus SPI on 10 and 11. A collision there fails in
-confusing ways, so check your own wiring against that list before changing them.
+CS 8, BUSY 24, plus SPI on 10 and 11, and PWR 18 unless `pwr_pin =` has freed
+it. They also avoid I2S — 18, 19, 20 and 21 — which an I2S DAC needs. A
+collision with any of those is quiet rather than loud: gpiozero takes the pin,
+the other device stops working, and nothing raises. Check your own wiring
+against that list before changing them.
 """
 
 import urllib.error
@@ -29,11 +32,11 @@ from gpiozero import Button
 BASE_URL = "http://localhost:6680/epaper/input/"
 
 BUTTONS = {
-    5: "toggle_lock",
-    6: "back",
-    16: "up",
-    20: "down",
-    21: "select",
+    5: "up",
+    6: "down",
+    13: "select",
+    16: "back",
+    26: "home",
 }
 
 
