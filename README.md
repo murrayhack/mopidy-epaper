@@ -1,5 +1,7 @@
 # Mopidy-Epaper
 
+[![tests](https://github.com/murrayhack/mopidy-epaper/actions/workflows/tests.yml/badge.svg)](https://github.com/murrayhack/mopidy-epaper/actions/workflows/tests.yml)
+
 A [Mopidy](https://mopidy.com/) frontend extension that shows now-playing
 information — title, artist, album, progress, queue position and volume — on a
 Waveshare 2.13" V4 e-paper display attached to a Raspberry Pi Zero.

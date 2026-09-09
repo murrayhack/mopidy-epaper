@@ -1,0 +1,33 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # mopidy.audio imports gi (PyGObject) at module level, so anything
+      # reaching mopidy.core needs GStreamer's Python bindings. They are system
+      # packages rather than wheels, which is why this uses the distro Python
+      # instead of actions/setup-python -- the same arrangement paperpod's
+      # setup.sh uses on the Pi, so CI exercises the real import chain rather
+      # than a stub that could drift from it.
+      - name: Install GStreamer bindings
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq python3-gi python3-gst-1.0 gir1.2-gstreamer-1.0
+
+      # --break-system-packages for the same reason setup.sh needs it: the
+      # extension has to land in the Python that owns gi. No hardware extra;
+      # spidev and gpiozero are Pi-only and the dummy driver covers this.
+      - name: Install
+        run: python3 -m pip install --break-system-packages -e '.[test]'
+
+      - name: Test
+        run: python3 -m pytest -q
