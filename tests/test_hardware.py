@@ -10,6 +10,7 @@ import importlib
 import pathlib
 import re
 import sys
+import types
 
 import pytest
 
@@ -163,3 +164,40 @@ def test_writes_to_a_disabled_pwr_pin_do_nothing():
     # digital_write is dispatched by pin number, so None must not match.
     interface.digital_write(None, 1)
     interface.digital_write(hardware.PWR_PIN, 1)
+
+
+def test_busy_is_claimed_without_edge_detection(monkeypatch):
+    """BUSY must not be a Button, however harmless that looks.
+
+    ``digital_read`` samples its level and nothing subscribes to edges, but
+    Button sets edge detection up regardless, which starts lgpio's alert
+    thread: a ppoll loop at roughly 1540 wakes a second. Measured at 4.70% of
+    a core against 0.15% for InputDevice, permanently, for a pin read a few
+    times per refresh. Nothing would fail if this regressed -- it would just
+    quietly cost 4.7% again -- so it is pinned here.
+    """
+    claimed = []
+
+    class Recorder:
+        def __init__(self, pin, **kwargs):
+            claimed.append((type(self).__name__, pin))
+
+        def close(self):
+            pass
+
+    fake_gpiozero = types.ModuleType("gpiozero")
+    for name in ("LED", "InputDevice", "Button"):
+        setattr(fake_gpiozero, name, type(name, (Recorder,), {}))
+    monkeypatch.setitem(sys.modules, "gpiozero", fake_gpiozero)
+
+    fake_spidev = types.ModuleType("spidev")
+    fake_spidev.SpiDev = lambda: types.SimpleNamespace(
+        open=lambda *a: None, close=lambda: None
+    )
+    monkeypatch.setitem(sys.modules, "spidev", fake_spidev)
+
+    hardware.PinInterface(pwr_pin=None)
+
+    by_pin = {pin: name for name, pin in claimed}
+    assert by_pin[hardware.BUSY_PIN] == "InputDevice"
+    assert "Button" not in {name for name, _ in claimed}

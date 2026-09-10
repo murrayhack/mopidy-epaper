@@ -97,7 +97,13 @@ class PinInterface:
         # pull_up=False matches the vendored module: BUSY reads high while the
         # panel is working. It also means a disconnected BUSY reads "idle",
         # which is why an absent panel produces no error anywhere.
-        self._busy = gpiozero.Button(BUSY_PIN, pull_up=False)
+        #
+        # InputDevice, not Button: BUSY is only ever sampled by digital_read,
+        # and nothing subscribes to edges on it. Button adds edge detection,
+        # which starts lgpio's alert thread -- a ppoll loop at ~1540 wakes a
+        # second, measured at 4.70% of a core against 0.15% for InputDevice,
+        # for a pin whose level is read a few times per refresh.
+        self._busy = gpiozero.InputDevice(BUSY_PIN, pull_up=False)
 
     def digital_write(self, pin, value):
         # CS is deliberately not in _outputs. The kernel drives the chip select
