@@ -25,6 +25,10 @@ class Playback:
     number: int = None
     total: int = 0
     muted: bool = False
+    #: Charge 0-100, already rounded by :class:`~mopidy_epaper.battery.Battery`
+    #: so the value on screen is stable. None when no PiSugar is configured or
+    #: it cannot be reached, which is the normal case on mains.
+    battery: int = None
 
     @property
     def length_ms(self):

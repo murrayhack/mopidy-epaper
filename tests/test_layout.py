@@ -3,7 +3,7 @@ from PIL import Image, ImageDraw
 from mopidy_epaper import layout
 from mopidy_epaper.playback import Playback
 
-_PLAYBACK_FIELDS = ("number", "total", "muted")
+_PLAYBACK_FIELDS = ("number", "total", "muted", "battery")
 
 
 def render(track, state, position_ms, volume, **kwargs):
@@ -242,3 +242,59 @@ def test_playback_defaults_render_the_nothing_playing_screen():
 
     assert image.size == (layout.WIDTH, layout.HEIGHT)
     assert image.mode == "1"
+
+
+def _status_strip(image):
+    return image.crop((0, layout.STATUS_TOP, layout.WIDTH, layout.HEIGHT)).tobytes()
+
+
+def test_battery_is_drawn_in_the_status_strip():
+    without = render(FakeTrack(), "playing", 30000, 80)
+    with_battery = render(FakeTrack(), "playing", 30000, 80, battery=50)
+
+    assert _status_strip(with_battery) != _status_strip(without)
+    # and only there: the track area is untouched
+    assert with_battery.crop((0, 0, layout.WIDTH, layout.STATUS_TOP)).tobytes() == (
+        without.crop((0, 0, layout.WIDTH, layout.STATUS_TOP)).tobytes()
+    )
+
+
+def test_a_fuller_battery_draws_differently_from_an_empty_one():
+    low = render(FakeTrack(), "playing", 30000, 80, battery=10)
+    high = render(FakeTrack(), "playing", 30000, 80, battery=90)
+
+    assert _status_strip(low) != _status_strip(high)
+
+
+def test_battery_is_skipped_when_the_status_strip_is_full():
+    """An overlapping battery would be worse than none.
+
+    A long track pushes the elapsed/total pair past the middle of a 250px
+    panel, and a queue counter and volume take the right-hand end. There is
+    nothing left to draw into, so it is left out.
+    """
+    long_track = FakeTrack(length=3 * 60 * 60 * 1000 + 23 * 60 * 1000)
+    crowded = dict(number=12, total=345)
+
+    without = render(long_track, "playing", 2 * 60 * 60 * 1000, 100, **crowded)
+    with_battery = render(long_track, "playing", 2 * 60 * 60 * 1000, 100, battery=50, **crowded)
+
+    assert _status_strip(with_battery) == _status_strip(without)
+
+
+def test_battery_survives_the_partial_refresh_path():
+    """The status strip is what a partial refresh redraws, so it must be there."""
+    base = render(FakeTrack(), "playing", 30000, 80, battery=50)
+    playback = Playback(
+        track=FakeTrack(), state="playing", position_ms=31000, volume=80, battery=50
+    )
+
+    updated = layout.render(playback, elapsed_only=True, base=base)
+
+    assert updated is base
+    plain = layout.render(
+        Playback(track=FakeTrack(), state="playing", position_ms=31000, volume=80),
+        elapsed_only=True,
+        base=render(FakeTrack(), "playing", 30000, 80),
+    )
+    assert _status_strip(updated) != _status_strip(plain)

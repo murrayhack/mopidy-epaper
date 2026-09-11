@@ -13,6 +13,7 @@ import pykka
 from mopidy import core
 
 from .display import EpaperDisplay
+from .battery import Battery
 from .playback import Playback
 from .ui import Ui
 
@@ -26,8 +27,9 @@ class MopidyPlayer:
     the screen state machine stays testable without a running Mopidy.
     """
 
-    def __init__(self, core):
+    def __init__(self, core, battery=None):
         self._core = core
+        self._battery = battery
 
     def browse(self, uri):
         """Library contents. ``None`` is the root."""
@@ -88,6 +90,7 @@ class MopidyPlayer:
             number=None if number is None else number + 1,
             total=total.get(),
             muted=muted.get(),
+            battery=None if self._battery is None else self._battery.percent(),
         )
 
     def play_queued(self, tlid):
@@ -133,7 +136,9 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
             self.stop()
             return
 
-        self.player = MopidyPlayer(self.core)
+        self.player = MopidyPlayer(
+            self.core, battery=Battery(self.config["battery_socket"])
+        )
         self.ui = Ui(
             self.config, self.display, player=self.player, on_dirty=self._render_wanted.set
         )

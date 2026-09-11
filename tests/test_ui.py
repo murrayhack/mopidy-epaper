@@ -1078,3 +1078,15 @@ def test_waking_clears_dormancy(clock):
     screen.handle_action("wake")
 
     assert not screen.dormant
+
+
+def test_status_key_covers_the_battery():
+    """Otherwise the charge would change on screen only when something else did."""
+    common = dict(state="playing", position_ms=1000, volume=50)
+
+    assert ui.status_key(Playback(**common, battery=30)) != ui.status_key(
+        Playback(**common, battery=40)
+    )
+    assert ui.status_key(Playback(**common, battery=30)) == ui.status_key(
+        Playback(**common, battery=30)
+    )

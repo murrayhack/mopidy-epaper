@@ -27,6 +27,11 @@ MARGIN = 6
 
 VOLUME_GLYPH_WIDTH = 10
 
+BATTERY_GLYPH_WIDTH = 16
+BATTERY_GLYPH_HEIGHT = 9
+#: Kept clear of the elapsed/total pair, which grows with the track length.
+BATTERY_GAP = 10
+
 _BOLD_FONTS = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
@@ -187,7 +192,9 @@ def _draw_status(draw, playback):
     _draw_state_glyph(draw, MARGIN, text_y + 2, playback.state)
 
     times = f"{_format_ms(position_ms)} / {_format_ms(length_ms)}"
-    draw.text((MARGIN + 16, text_y), times, font=text_font, fill=BLACK)
+    times_left = MARGIN + 16
+    draw.text((times_left, text_y), times, font=text_font, fill=BLACK)
+    times_right = times_left + draw.textlength(times, font=text_font)
 
     right_edge = WIDTH - MARGIN
     volume = playback.volume
@@ -207,6 +214,46 @@ def _draw_status(draw, playback):
         counter = f"{number}/{total}"
         counter_width = draw.textlength(counter, font=text_font)
         draw.text((right_edge - counter_width, text_y), counter, font=text_font, fill=BLACK)
+        right_edge -= counter_width + 10
+
+    # Last, in whatever is left between the elapsed time and the counter. A
+    # long track pushes the times past the middle of a 250px panel, so this is
+    # drawn only if it fits -- an overlapping battery would be worse than none.
+    battery = playback.battery
+    if battery is not None:
+        battery_text = str(battery)
+        battery_width = (
+            BATTERY_GLYPH_WIDTH + 3 + draw.textlength(battery_text, font=text_font)
+        )
+        battery_left = right_edge - battery_width
+        if battery_left >= times_right + BATTERY_GAP:
+            _draw_battery_glyph(draw, battery_left, text_y + 3, battery)
+            draw.text(
+                (battery_left + BATTERY_GLYPH_WIDTH + 3, text_y),
+                battery_text,
+                font=text_font,
+                fill=BLACK,
+            )
+
+
+def _draw_battery_glyph(draw, x, y, percent, width=BATTERY_GLYPH_WIDTH, height=BATTERY_GLYPH_HEIGHT):
+    """An outline filled in proportion to charge, with the usual nub.
+
+    One bar rather than a number alone: on a 250px panel the shape reads at a
+    glance, and the number beside it says how much.
+    """
+    body_right = x + width - 2
+    draw.rectangle((x, y, body_right, y + height), outline=BLACK, fill=WHITE)
+
+    nub_inset = height // 3
+    draw.rectangle(
+        (body_right + 1, y + nub_inset, x + width, y + height - nub_inset), fill=BLACK
+    )
+
+    inner_left, inner_right = x + 2, body_right - 2
+    filled = int((inner_right - inner_left) * max(0, min(100, percent)) / 100)
+    if filled > 0:
+        draw.rectangle((inner_left, y + 2, inner_left + filled, y + height - 2), fill=BLACK)
 
 
 def _draw_state_glyph(draw, x, y, state, size=9):

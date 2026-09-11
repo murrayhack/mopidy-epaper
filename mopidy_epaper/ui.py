@@ -94,6 +94,9 @@ def status_key(playback):
         playback.number,
         playback.total,
         playback.muted,
+        # Already rounded, so this only changes when the glyph would, rather
+        # than on every jitter of the underlying voltage estimate.
+        playback.battery,
     )
 
 

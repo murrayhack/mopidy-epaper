@@ -27,6 +27,9 @@ class Extension(ext.Extension):
         # which is what a panel with no power gate — or a Pi with an I2S DAC
         # on GPIO 18 — needs.
         schema["pwr_pin"] = config.Integer(optional=True, minimum=0, maximum=27)
+        # A PiSugar power manager's Unix socket. Unset means no battery
+        # indicator, which is the right default: most builds are on mains.
+        schema["battery_socket"] = config.String(optional=True)
         schema["dummy_output_path"] = config.Path(optional=True)
         return schema
 
