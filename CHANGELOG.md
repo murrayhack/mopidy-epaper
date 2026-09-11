@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Battery charge on the status strip, from a PiSugar power manager, behind
+  the new `battery_socket` option. Read over the power manager's Unix socket
+  rather than from I2C, so no model's register layout lands here and the
+  kernel's RTC driver stays the only thing on that bus. Rounded to the
+  nearest 10%, because raw readings jitter by a point or two and every
+  change on e-paper costs a refresh. Dropped rather than overlapped when a
+  long track and a long queue leave no room. Absent hardware is silent.
+
+## v1.1.0 — 2026-09-11
+
 - `pwr_pin` config option. The vendored Waveshare driver hardcodes the
   panel's power-gate pin to GPIO 18, which is also I2S BCLK — so a Pi
   with an I2S DAC could not run both. Leave it empty to claim no pin,
@@ -11,6 +21,11 @@
   well as 3.3V: the controller runs on 3.3V but the charge pump that
   drives the pigment does not, and omitting it produces a panel that
   initialises, reports ready, and never changes.
+- BUSY is read with `InputDevice` rather than `Button`. `Button` sets up edge
+  detection, which starts lgpio's alert thread polling at roughly 1540 wakes
+  a second — for a pin whose level is sampled a few times per refresh and
+  which nothing subscribes to. Measured 4.70% of a core against 0.15%.
+- Tests run in CI on push and pull requests.
 
 ## v1.0.0 — 2026-08-24
 

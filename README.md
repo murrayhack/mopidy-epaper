@@ -135,6 +135,7 @@ menu_timeout = 20
 web_remote = true
 input_coalesce_ms = 80
 pwr_pin = 18
+battery_socket =
 dummy_output_path =
 ```
 
@@ -149,9 +150,40 @@ dummy_output_path =
 | `web_remote` | Serve the remote page at `/epaper/`. `false` serves the JSON action listing there instead. |
 | `input_coalesce_ms` | How long to gather further presses before drawing, so a burst of them costs one refresh instead of several. `0` draws on every press. |
 | `pwr_pin` | GPIO the panel's power gate hangs off. Leave it empty to claim no pin at all, which boards without that circuit want — and which an I2S DAC on GPIO 18 requires. |
+| `battery_socket` | A PiSugar power manager's Unix socket, e.g. `/tmp/pisugar-server.sock`. Empty means no battery indicator, which is what a mains build wants. |
 | `dummy_output_path` | Where the `dummy` driver writes its PNG. Defaults to `/tmp/mopidy-epaper.png`. |
 
 Confirm the extension is loaded with `mopidy deps list`.
+
+### Battery
+
+With `battery_socket` set to a PiSugar power manager's socket, the status strip
+gains a charge indicator beside the queue counter:
+
+```
+>  1:23 / 4:00              [##]80  3/12  <65
+```
+
+Charge is read over the power manager's Unix socket rather than from I2C
+directly, so nothing here needs to know a particular PiSugar model's register
+layout — and the kernel's RTC driver stays the only thing touching that bus.
+
+Two details that are not obvious:
+
+**The value is rounded to the nearest 10%.** Raw readings jitter by a point or
+two, because the estimate comes from battery voltage, which sags under load and
+recovers. On a screen that redraws cheaply that would not matter; here every
+change costs an e-paper refresh, so a number wandering between 29 and 31 would
+repaint the panel for nothing.
+
+**It is dropped when the status strip is full.** A long track pushes the
+elapsed/total pair past the middle of a 250px panel, and the queue counter and
+volume hold the right-hand end. Rather than overlap them the indicator is left
+out — in practice it survives everything short of a three-hour track with a
+three-digit queue.
+
+An unset or unreachable socket simply means no indicator. An absent PiSugar is
+the normal case and is not logged as a problem.
 
 ## Sleep and lock
 
