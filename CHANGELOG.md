@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.2.0 — 2026-09-11
 
 - Battery charge on the status strip, from a PiSugar power manager, behind
   the new `battery_socket` option. Read over the power manager's Unix socket
