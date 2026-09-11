@@ -3,7 +3,7 @@ from PIL import Image, ImageDraw
 from mopidy_epaper import layout
 from mopidy_epaper.playback import Playback
 
-_PLAYBACK_FIELDS = ("number", "total", "muted", "battery")
+_PLAYBACK_FIELDS = ("number", "total", "muted", "battery", "plugged")
 
 
 def render(track, state, position_ms, volume, **kwargs):
@@ -298,3 +298,44 @@ def test_battery_survives_the_partial_refresh_path():
         base=render(FakeTrack(), "playing", 30000, 80),
     )
     assert _status_strip(updated) != _status_strip(plain)
+
+
+def test_the_bolt_is_drawn_when_the_charger_is_connected():
+    unplugged = render(FakeTrack(), "playing", 30000, 80, battery=80)
+    plugged = render(FakeTrack(), "playing", 30000, 80, battery=80, plugged=True)
+
+    assert _status_strip(plugged) != _status_strip(unplugged)
+
+
+def test_the_bolt_still_shows_on_a_full_battery():
+    """It follows the cable, not the charge current.
+
+    battery_charging goes false once the cell is full, and a bolt that
+    vanishes at 100% reads as a fault rather than as finished.
+    """
+    full = render(FakeTrack(), "playing", 30000, 80, battery=100, plugged=True)
+    full_unplugged = render(FakeTrack(), "playing", 30000, 80, battery=100)
+
+    assert _status_strip(full) != _status_strip(full_unplugged)
+
+
+def test_the_bolt_is_included_in_the_fit():
+    """It widens the indicator, so the space check has to account for it.
+
+    A width that fits without the bolt can overlap the elapsed time with it.
+    """
+    long_track = FakeTrack(length=2 * 60 * 60 * 1000 + 50 * 60 * 1000)
+    common = dict(number=12, total=345)
+    position = 2 * 60 * 60 * 1000
+
+    without_indicator = _status_strip(render(long_track, "playing", position, 100, **common))
+    plugged = _status_strip(
+        render(long_track, "playing", position, 100, battery=50, plugged=True, **common)
+    )
+    unplugged = _status_strip(
+        render(long_track, "playing", position, 100, battery=50, **common)
+    )
+
+    # Whatever fits, the bolt is never drawn where the plain indicator was not.
+    if plugged != without_indicator:
+        assert unplugged != without_indicator

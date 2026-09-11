@@ -161,7 +161,8 @@ With `battery_socket` set to a PiSugar power manager's socket, the status strip
 gains a charge indicator beside the queue counter:
 
 ```
->  1:23 / 4:00              [##]80  3/12  <65
+>  1:23 / 4:00              [##]80  3/12  <65     on battery
+>  1:23 / 4:00             /[##]80  3/12  <65     charger connected
 ```
 
 Charge is read over the power manager's Unix socket rather than from I2C
@@ -181,6 +182,11 @@ elapsed/total pair past the middle of a 250px panel, and the queue counter and
 volume hold the right-hand end. Rather than overlap them the indicator is left
 out — in practice it survives everything short of a three-hour track with a
 three-digit queue.
+
+A bolt beside the battery means the charger is connected. It follows
+`battery_power_plugged` rather than `battery_charging`: the two agree except on
+a full battery, where charging stops and only the first stays true. A bolt that
+vanishes at 100% reads as a fault rather than as finished.
 
 An unset or unreachable socket simply means no indicator. An absent PiSugar is
 the normal case and is not logged as a problem.

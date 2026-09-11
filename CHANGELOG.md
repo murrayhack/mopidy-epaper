@@ -9,6 +9,9 @@
   nearest 10%, because raw readings jitter by a point or two and every
   change on e-paper costs a refresh. Dropped rather than overlapped when a
   long track and a long queue leave no room. Absent hardware is silent.
+- A bolt beside the charge when the charger is connected, following
+  `battery_power_plugged` rather than `battery_charging` so it does not
+  vanish on a full battery and read as a fault.
 
 ## v1.1.0 — 2026-09-11
 

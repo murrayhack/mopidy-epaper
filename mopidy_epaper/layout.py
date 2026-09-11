@@ -32,6 +32,9 @@ BATTERY_GLYPH_HEIGHT = 9
 #: Kept clear of the elapsed/total pair, which grows with the track length.
 BATTERY_GAP = 10
 
+BOLT_WIDTH = 6
+BOLT_GAP = 2
+
 _BOLD_FONTS = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
@@ -222,18 +225,45 @@ def _draw_status(draw, playback):
     battery = playback.battery
     if battery is not None:
         battery_text = str(battery)
+        bolt_width = BOLT_WIDTH + BOLT_GAP if playback.plugged else 0
         battery_width = (
-            BATTERY_GLYPH_WIDTH + 3 + draw.textlength(battery_text, font=text_font)
+            bolt_width
+            + BATTERY_GLYPH_WIDTH
+            + 3
+            + draw.textlength(battery_text, font=text_font)
         )
         battery_left = right_edge - battery_width
         if battery_left >= times_right + BATTERY_GAP:
-            _draw_battery_glyph(draw, battery_left, text_y + 3, battery)
+            if playback.plugged:
+                _draw_bolt_glyph(draw, battery_left, text_y + 2)
+            glyph_left = battery_left + bolt_width
+            _draw_battery_glyph(draw, glyph_left, text_y + 3, battery)
             draw.text(
-                (battery_left + BATTERY_GLYPH_WIDTH + 3, text_y),
+                (glyph_left + BATTERY_GLYPH_WIDTH + 3, text_y),
                 battery_text,
                 font=text_font,
                 fill=BLACK,
             )
+
+
+def _draw_bolt_glyph(draw, x, y, width=BOLT_WIDTH, height=11):
+    """The charger is connected.
+
+    Left of the battery rather than inside it: at 16x9 the outline is mostly
+    fill, and a bolt drawn over it is a smudge at this size.
+    """
+    mid_x = x + width / 2
+    draw.polygon(
+        [
+            (mid_x + 1, y),
+            (x, y + height * 0.58),
+            (mid_x - 0.5, y + height * 0.58),
+            (mid_x - 1, y + height),
+            (x + width, y + height * 0.42),
+            (mid_x + 0.5, y + height * 0.42),
+        ],
+        fill=BLACK,
+    )
 
 
 def _draw_battery_glyph(draw, x, y, percent, width=BATTERY_GLYPH_WIDTH, height=BATTERY_GLYPH_HEIGHT):

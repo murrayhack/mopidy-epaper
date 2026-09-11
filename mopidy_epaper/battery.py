@@ -10,6 +10,7 @@ that bus — a second writer the kernel does not know about is how you get an
 occasional wrong clock and no error anywhere.
 """
 
+import dataclasses
 import logging
 import socket
 
@@ -25,6 +26,19 @@ TIMEOUT = 0.5
 BUCKET = 10
 
 
+@dataclasses.dataclass(frozen=True)
+class Charge:
+    """What the power manager reports, at the resolution the panel shows it."""
+
+    #: 0-100, rounded to :data:`BUCKET`.
+    percent: int
+    #: Whether the charger is connected. From ``battery_power_plugged`` rather
+    #: than ``battery_charging``: the two agree except on a full battery, where
+    #: charging stops and only this one stays true. A bolt that vanishes at
+    #: 100% reads as a fault rather than as "finished".
+    plugged: bool = False
+
+
 class Battery:
     """Charge from a PiSugar server, rounded so it does not flicker."""
 
@@ -33,13 +47,14 @@ class Battery:
         self._bucket = bucket
         self._seen = False
 
-    def percent(self):
-        """Charge 0-100 rounded to ``bucket``, or None if it cannot be read."""
+    def read(self):
+        """A :class:`Charge`, or None if the power manager cannot be reached."""
         if not self._socket_path:
             return None
 
         try:
-            reply = self._ask("get battery")
+            charge_reply = self._ask("get battery")
+            plugged_reply = self._ask("get battery_power_plugged")
         except OSError as exc:
             # Quiet until it has answered once. A panel with no PiSugar has no
             # socket to reach, and warning every few seconds about hardware
@@ -48,14 +63,19 @@ class Battery:
             log("Could not read battery: %s", exc)
             return None
 
-        value = _parse(reply)
+        value = _parse_float(charge_reply)
         if value is None:
-            logger.debug("Unexpected battery reply: %r", reply)
+            logger.debug("Unexpected battery reply: %r", charge_reply)
             return None
 
         self._seen = True
         value = max(0.0, min(100.0, value))
-        return int(round(value / self._bucket) * self._bucket)
+        return Charge(
+            percent=int(round(value / self._bucket) * self._bucket),
+            # An unreadable flag is reported as not plugged: a missing bolt is
+            # a smaller lie than one that is stuck on.
+            plugged=_parse_bool(plugged_reply) or False,
+        )
 
     def _ask(self, command):
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
@@ -65,12 +85,25 @@ class Battery:
             return sock.recv(64).decode("utf-8", "replace")
 
 
-def _parse(reply):
-    """``"battery: 28.754677"`` to ``28.754677``."""
+def _value_of(reply):
     _, separator, value = reply.partition(":")
-    if not separator:
+    return value.strip() if separator else None
+
+
+def _parse_float(reply):
+    """``"battery: 28.754677"`` to ``28.754677``."""
+    value = _value_of(reply)
+    if value is None:
         return None
     try:
-        return float(value.strip())
+        return float(value)
     except ValueError:
         return None
+
+
+def _parse_bool(reply):
+    """``"battery_power_plugged: true"`` to ``True``."""
+    value = _value_of(reply)
+    if value is None:
+        return None
+    return {"true": True, "false": False}.get(value.lower())

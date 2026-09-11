@@ -29,6 +29,8 @@ class Playback:
     #: so the value on screen is stable. None when no PiSugar is configured or
     #: it cannot be reached, which is the normal case on mains.
     battery: int = None
+    #: Charger connected. Drawn as a bolt beside the charge.
+    plugged: bool = False
 
     @property
     def length_ms(self):

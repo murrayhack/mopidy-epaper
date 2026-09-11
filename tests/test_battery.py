@@ -19,11 +19,24 @@ from mopidy_epaper.battery import Battery
 
 
 class FakeServer:
-    """Answers one line per connection, as pisugar-server does."""
+    """Answers one line per connection, as pisugar-server does.
 
-    def __init__(self, directory, reply="battery: 28.754677", accept=True):
+    Routed by request, because the reader asks two different questions and a
+    server that answered both the same way would let a broken parse pass.
+    """
+
+    DEFAULTS = {
+        b"get battery": "battery: 28.754677",
+        b"get battery_power_plugged": "battery_power_plugged: false",
+    }
+
+    def __init__(self, directory, reply=None, replies=None, accept=True):
         self.path = f"{directory}/s"
-        self.reply = reply
+        self.replies = dict(self.DEFAULTS)
+        if replies:
+            self.replies.update(replies)
+        if reply is not None:
+            self.replies[b"get battery"] = reply
         self.requests = []
         self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self._sock.bind(self.path)
@@ -40,9 +53,11 @@ class FakeServer:
             except OSError:
                 return
             with conn:
-                self.requests.append(conn.recv(64))
-                if self.reply is not None:
-                    conn.sendall(self.reply.encode())
+                request = conn.recv(64)
+                self.requests.append(request)
+                reply = self.replies.get(request.strip())
+                if reply is not None:
+                    conn.sendall(reply.encode())
 
     def close(self):
         self._stop.set()
@@ -73,11 +88,11 @@ def server(sockdir):
 
 
 def test_reads_and_rounds_the_charge(server):
-    assert Battery(server.path).percent() == 30
+    assert Battery(server.path).read().percent == 30
 
 
 def test_asks_for_the_battery(server):
-    Battery(server.path).percent()
+    Battery(server.path).read()
 
     assert server.requests[0] == b"get battery\n"
 
@@ -99,7 +114,7 @@ def test_asks_for_the_battery(server):
 def test_rounding_and_clamping(sockdir, reply, expected):
     server = FakeServer(sockdir, reply=reply)
     try:
-        assert Battery(server.path).percent() == expected
+        assert Battery(server.path).read().percent == expected
     finally:
         server.close()
 
@@ -114,19 +129,19 @@ def test_jitter_does_not_move_the_displayed_value(sockdir):
     for reading in ("31.354862", "29.881325", "29.924656", "31.07734"):
         server = FakeServer(sockdir, reply=f"battery: {reading}")
         try:
-            assert Battery(server.path).percent() == 30
+            assert Battery(server.path).read().percent == 30
         finally:
             server.close()
 
 
 def test_no_socket_configured_is_not_an_error():
     """Most builds are on mains with no PiSugar at all."""
-    assert Battery("").percent() is None
-    assert Battery(None).percent() is None
+    assert Battery("").read() is None
+    assert Battery(None).read() is None
 
 
 def test_an_unreachable_socket_returns_none(sockdir):
-    assert Battery(f"{sockdir}/absent").percent() is None
+    assert Battery(f"{sockdir}/absent").read() is None
 
 
 def test_an_unreachable_socket_is_quiet_until_it_has_answered_once(sockdir, caplog):
@@ -138,7 +153,7 @@ def test_an_unreachable_socket_is_quiet_until_it_has_answered_once(sockdir, capl
     missing = f"{sockdir}/absent"
 
     with caplog.at_level(logging.DEBUG, logger="mopidy_epaper.battery"):
-        assert Battery(missing).percent() is None
+        assert Battery(missing).read() is None
     assert [r.levelname for r in caplog.records] == ["DEBUG"]
 
 
@@ -146,12 +161,12 @@ def test_a_socket_that_stops_answering_does_warn(sockdir, caplog):
     """Once it has worked, a failure is real news."""
     server = FakeServer(sockdir)
     battery = Battery(server.path)
-    assert battery.percent() == 30
+    assert battery.read().percent == 30
     server.close()
 
     caplog.clear()
     with caplog.at_level(logging.DEBUG, logger="mopidy_epaper.battery"):
-        assert battery.percent() is None
+        assert battery.read() is None
 
     assert any(r.levelname == "WARNING" for r in caplog.records)
 
@@ -160,6 +175,48 @@ def test_a_socket_that_stops_answering_does_warn(sockdir, caplog):
 def test_an_unparseable_reply_returns_none(sockdir, reply):
     server = FakeServer(sockdir, reply=reply)
     try:
-        assert Battery(server.path).percent() is None
+        assert Battery(server.path).read() is None
     finally:
         server.close()
+
+
+@pytest.mark.parametrize(
+    "reply,expected",
+    [
+        ("battery_power_plugged: true", True),
+        ("battery_power_plugged: false", False),
+        # Anything unreadable is reported as not plugged: a missing bolt is a
+        # smaller lie than one stuck on.
+        ("battery_power_plugged: maybe", False),
+        ("garbage", False),
+        ("", False),
+    ],
+)
+def test_plugged_state(sockdir, reply, expected):
+    server = FakeServer(sockdir, replies={b"get battery_power_plugged": reply})
+    try:
+        assert Battery(server.path).read().plugged is expected
+    finally:
+        server.close()
+
+
+def test_both_questions_are_asked(sockdir):
+    server = FakeServer(sockdir)
+    try:
+        Battery(server.path).read()
+    finally:
+        server.close()
+
+    assert server.requests == [b"get battery\n", b"get battery_power_plugged\n"]
+
+
+def test_an_unreadable_plug_state_does_not_lose_the_charge(sockdir):
+    """The charge is the useful half; do not throw it away over the bolt."""
+    server = FakeServer(sockdir, replies={b"get battery_power_plugged": "nonsense"})
+    try:
+        charge = Battery(server.path).read()
+    finally:
+        server.close()
+
+    assert charge.percent == 30
+    assert charge.plugged is False

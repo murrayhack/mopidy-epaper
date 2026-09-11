@@ -81,6 +81,8 @@ class MopidyPlayer:
         index = self._core.tracklist.index()
         total = self._core.tracklist.get_length()
 
+        charge = None if self._battery is None else self._battery.read()
+
         number = index.get()
         return Playback(
             track=track.get(),
@@ -90,7 +92,8 @@ class MopidyPlayer:
             number=None if number is None else number + 1,
             total=total.get(),
             muted=muted.get(),
-            battery=None if self._battery is None else self._battery.percent(),
+            battery=None if charge is None else charge.percent,
+            plugged=False if charge is None else charge.plugged,
         )
 
     def play_queued(self, tlid):

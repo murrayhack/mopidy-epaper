@@ -1090,3 +1090,12 @@ def test_status_key_covers_the_battery():
     assert ui.status_key(Playback(**common, battery=30)) == ui.status_key(
         Playback(**common, battery=30)
     )
+
+
+def test_status_key_covers_the_charger():
+    """The bolt appearing is a change on screen, so it must force a repaint."""
+    common = dict(state="playing", position_ms=1000, volume=50, battery=50)
+
+    assert ui.status_key(Playback(**common, plugged=True)) != ui.status_key(
+        Playback(**common, plugged=False)
+    )
