@@ -128,6 +128,7 @@ Add to your `mopidy.conf`:
 enabled = true
 driver = epd2in13_v4
 update_interval = 5
+update_interval_charging =
 full_refresh_every = 60
 sleep_after = 300
 idle_screen = keep
@@ -143,6 +144,7 @@ dummy_output_path =
 | --- | --- |
 | `driver` | `epd2in13_v4` for the real panel, or `dummy` to render PNG frames to disk instead. |
 | `update_interval` | Seconds between progress-bar refreshes while playing. |
+| `update_interval_charging` | Seconds between refreshes while the charger is connected. Empty uses `update_interval` whatever the power source. |
 | `full_refresh_every` | Partial refreshes allowed before forcing a full refresh to clear ghosting. |
 | `sleep_after` | Seconds without playback — paused or stopped — before the panel is put to sleep. `0` disables it. |
 | `idle_screen` | `keep` leaves the last frame on the panel when it sleeps, `blank` clears it first. |
@@ -187,6 +189,22 @@ A bolt beside the battery means the charger is connected. It follows
 `battery_power_plugged` rather than `battery_charging`: the two agree except on
 a full battery, where charging stops and only the first stays true. A bolt that
 vanishes at 100% reads as a fault rather than as finished.
+
+Setting `update_interval_charging` refreshes the panel faster while the
+charger is connected, where the only cost is driving the panel:
+
+```ini
+update_interval = 5
+update_interval_charging = 1
+```
+
+**Raise `full_refresh_every` alongside it.** That option counts *partials*, so
+the time between the full-screen flashes that clear ghosting scales with the
+refresh rate — at the defaults, going from 5s to 1s takes the flash from one
+every five minutes to one every minute, which is more irritating than a
+second-accurate progress bar is pleasant. Multiplying `full_refresh_every` by
+the same factor keeps the flash where it was, at the cost of more ghosting
+accumulating between clears.
 
 An unset or unreachable socket simply means no indicator. An absent PiSugar is
 the normal case and is not logged as a problem.

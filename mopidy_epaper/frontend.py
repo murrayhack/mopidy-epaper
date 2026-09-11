@@ -14,6 +14,7 @@ from mopidy import core
 
 from .display import EpaperDisplay
 from .battery import Battery
+from . import timing
 from .playback import Playback
 from .ui import Ui
 
@@ -120,6 +121,7 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
     def __init__(self, config, core):
         super().__init__()
         self.config = config["epaper"]
+        self._plugged = False
         self.core = core
         self.display = None
         self.ui = None
@@ -172,14 +174,21 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
         nothing a tick can do, and playback events wake it, so the tick stops
         costing anything until then.
         """
-        interval = self.config["update_interval"]
-        while not self._stop_event.wait(interval):
+        while not self._stop_event.wait(self._tick_interval()):
             try:
                 if self.ui.dormant:
                     continue
                 self._invalidate_playback()
             except Exception:
                 logger.exception("e-paper tick failed")
+
+    def _tick_interval(self):
+        """Re-read every time round the loop, not fixed when the thread starts.
+
+        Plugging the charger in then speeds the panel up there and then,
+        instead of needing a restart.
+        """
+        return timing.tick_interval(self.config, self._plugged)
 
     def _render_loop(self):
         """Draw pending menu changes, off the actor thread.
@@ -228,6 +237,10 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
         except Exception:
             logger.exception("Could not read playback state")
             return
+        # Read on the render thread, consulted by the ticker: a plain bool
+        # assignment, so no lock is needed for the ticker to see it.
+        self._plugged = bool(playback.plugged)
+
         try:
             self.ui.render_playback(playback)
         except Exception:

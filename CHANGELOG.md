@@ -12,6 +12,10 @@
 - A bolt beside the charge when the charger is connected, following
   `battery_power_plugged` rather than `battery_charging` so it does not
   vanish on a full battery and read as a fault.
+- `update_interval_charging`, an optional faster refresh rate while the
+  charger is connected. Note that `full_refresh_every` counts partials, so
+  the full-screen flash that clears ghosting scales with the rate and wants
+  raising alongside it.
 
 ## v1.1.0 — 2026-09-11
 

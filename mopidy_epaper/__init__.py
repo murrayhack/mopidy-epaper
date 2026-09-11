@@ -17,6 +17,8 @@ class Extension(ext.Extension):
         schema = super().get_config_schema()
         schema["driver"] = config.String(choices=["epd2in13_v4", "dummy"])
         schema["update_interval"] = config.Integer(minimum=1)
+        # Optional: unset means the same rate on mains as on battery.
+        schema["update_interval_charging"] = config.Integer(optional=True, minimum=1)
         schema["full_refresh_every"] = config.Integer(minimum=1)
         schema["sleep_after"] = config.Integer(minimum=0)
         schema["idle_screen"] = config.String(choices=["keep", "blank"])
