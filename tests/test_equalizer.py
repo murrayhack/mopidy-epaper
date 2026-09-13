@@ -141,3 +141,19 @@ def test_flat_is_not_the_midpoint():
     would quietly cut instead.
     """
     assert equalizer.FLAT == 66
+
+
+def test_reset_flattens_every_band(run):
+    assert Equalizer("equal").reset() == 3
+
+    sets = [call for call in run.calls if "set" in call]
+    assert [call[-2:] for call in sets] == [
+        ["00. 31 Hz", "66%"],
+        ["01. 63 Hz", "66%"],
+        ["09. 16 kHz", "66%"],
+    ]
+
+
+def test_reset_with_no_device_does_nothing(run):
+    assert Equalizer("").reset() == 0
+    assert run.calls == []

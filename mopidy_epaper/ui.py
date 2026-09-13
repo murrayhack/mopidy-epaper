@@ -46,6 +46,7 @@ LIBRARY_TITLE = "Library"
 PLAYLISTS_TITLE = "Playlists"
 QUEUE_TITLE = "Queue"
 EQUALIZER_TITLE = "Equalizer"
+EQUALIZER_RESET = "Reset all"
 
 #: Repeat cycles through these in order.
 REPEAT_STATES = ("off", "all", "one")
@@ -394,7 +395,13 @@ class Ui:
     # -- library and queue ------------------------------------------------
 
     def _band_entries(self):
-        return [_band_entry(name, level) for name, level in self._equalizer.bands()]
+        entries = [_band_entry(name, level) for name, level in self._equalizer.bands()]
+        if entries:
+            # Last, not first: the cursor lands on the first row, and a reset
+            # one press from opening the menu is a reset waiting to happen.
+            # Wrapping means up-from-the-top still reaches it in one press.
+            entries.append(Entry(EQUALIZER_RESET, "action", "eq_reset"))
+        return entries
 
     def _open_equalizer(self):
         self._push("equalizer", EQUALIZER_TITLE, self._band_entries())
@@ -554,7 +561,12 @@ class Ui:
         elif frame["kind"] == "queue":
             self._select_queued(item)
         elif frame["kind"] == "equalizer":
-            self._open_band(item)
+            if item.action == "eq_reset":
+                self._equalizer.reset()
+                self._reload_frame()
+                self._draw_menu()
+            else:
+                self._open_band(item)
         elif frame["kind"] == "eq_band":
             # There is nothing to pick, so select means done. Doing nothing
             # reads as an unresponsive button.

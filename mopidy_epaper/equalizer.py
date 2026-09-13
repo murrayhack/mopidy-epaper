@@ -63,6 +63,13 @@ class Equalizer:
         self._run("set", name, f"{level}%")
         return level
 
+    def reset(self):
+        """Every band back to :data:`FLAT`. Returns how many were set."""
+        bands = self.bands()
+        for name, _ in bands:
+            self.set_band(name, FLAT)
+        return len(bands)
+
     def _run(self, *args):
         try:
             completed = subprocess.run(

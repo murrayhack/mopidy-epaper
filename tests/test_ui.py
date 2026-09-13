@@ -163,7 +163,10 @@ class FakeEqualizer:
 
     def __init__(self, enabled=True, bands=None):
         self.enabled = enabled
-        self._bands = dict(bands or {"00. 31 Hz": 66, "01. 63 Hz": 66, "09. 16 kHz": 66})
+        # `bands or {...}` would treat an empty dict as "use the defaults",
+        # which is exactly the case a no-bands test needs to express.
+        default = {"00. 31 Hz": 66, "01. 63 Hz": 66, "09. 16 kHz": 66}
+        self._bands = dict(default if bands is None else bands)
         self.applied = []
 
     def bands(self):
@@ -174,6 +177,11 @@ class FakeEqualizer:
         self._bands[name] = level
         self.applied.append((name, level))
         return level
+
+    def reset(self):
+        for name in self._bands:
+            self.set_band(name, 66)
+        return len(self._bands)
 
 
 def open_library(screen):
@@ -1163,7 +1171,12 @@ def test_the_equalizer_lists_its_bands():
     frame = screen._stack[-1]
     assert frame["kind"] == "equalizer"
     # The numeric prefix orders the controls and is not worth showing.
-    assert [item.name for item in frame["items"]] == ["31 Hz", "63 Hz", "16 kHz"]
+    assert [item.name for item in frame["items"]] == [
+        "31 Hz",
+        "63 Hz",
+        "16 kHz",
+        ui.EQUALIZER_RESET,
+    ]
 
 
 def test_a_band_at_the_neutral_point_reads_as_flat():
@@ -1285,3 +1298,47 @@ def test_a_band_changed_elsewhere_shows_on_return():
     screen.handle_action("back")
 
     assert screen._stack[-1]["items"][0].value == "20"
+
+
+def test_reset_is_last_so_it_is_not_one_press_from_opening():
+    """The cursor lands on the first row. A reset there is a reset waiting
+    to happen, and wrapping still reaches it in one press from the top."""
+    screen = make_ui(FakeDisplay(), equalizer=FakeEqualizer())
+
+    open_equalizer(screen)
+
+    assert screen._stack[-1]["items"][-1].name == ui.EQUALIZER_RESET
+    assert screen._stack[-1]["selected"] == 0
+
+
+def test_reset_flattens_every_band():
+    eq = FakeEqualizer(bands={"00. 31 Hz": 90, "01. 63 Hz": 20, "09. 16 kHz": 66})
+    screen = make_ui(FakeDisplay(), equalizer=eq)
+    open_equalizer(screen)
+    screen._stack[-1]["selected"] = len(screen._stack[-1]["items"]) - 1
+
+    screen.handle_action("select")
+
+    assert dict(eq.bands()) == {"00. 31 Hz": 66, "01. 63 Hz": 66, "09. 16 kHz": 66}
+
+
+def test_reset_stays_on_the_list_and_shows_the_result():
+    eq = FakeEqualizer(bands={"00. 31 Hz": 90})
+    screen = make_ui(FakeDisplay(), equalizer=eq)
+    open_equalizer(screen)
+    screen._stack[-1]["selected"] = len(screen._stack[-1]["items"]) - 1
+
+    screen.handle_action("select")
+
+    frame = screen._stack[-1]
+    assert frame["kind"] == "equalizer"
+    assert frame["items"][0].value == "flat"
+
+
+def test_no_reset_row_when_there_are_no_bands():
+    """An equalizer that answers with nothing offers nothing to reset."""
+    screen = make_ui(FakeDisplay(), equalizer=FakeEqualizer(bands={}))
+
+    open_equalizer(screen)
+
+    assert screen._stack[-1]["items"] == []
