@@ -137,6 +137,7 @@ web_remote = true
 input_coalesce_ms = 80
 pwr_pin = 18
 battery_socket =
+equalizer_device =
 dummy_output_path =
 ```
 
@@ -152,6 +153,7 @@ dummy_output_path =
 | `web_remote` | Serve the remote page at `/epaper/`. `false` serves the JSON action listing there instead. |
 | `input_coalesce_ms` | How long to gather further presses before drawing, so a burst of them costs one refresh instead of several. `0` draws on every press. |
 | `pwr_pin` | GPIO the panel's power gate hangs off. Leave it empty to claim no pin at all, which boards without that circuit want — and which an I2S DAC on GPIO 18 requires. |
+| `equalizer_device` | An ALSA mixer device carrying equalizer bands, e.g. `equal` from `libasound2-plugin-equal`. Empty means no Equalizer entry in the menu. |
 | `battery_socket` | A PiSugar power manager's Unix socket, e.g. `/tmp/pisugar-server.sock`. Empty means no battery indicator, which is what a mains build wants. |
 | `dummy_output_path` | Where the `dummy` driver writes its PNG. Defaults to `/tmp/mopidy-epaper.png`. |
 
@@ -225,6 +227,39 @@ unlocked — the frozen frame *is* the lock screen, costing nothing to display.
 
 Lock is not bound to any particular button — it is exposed through the input
 API below.
+
+### Equalizer
+
+With `equalizer_device` set, the menu gains an **Equalizer** entry listing the
+device's bands. Selecting one opens it on its own, where **up and down change
+the level** and **back** returns to the list. Changes apply immediately —
+nothing is restarted.
+
+```
+  Equalizer                    31 Hz
+  ------------------           ------
+  > 31 Hz          flat        > 31 Hz        75
+    63 Hz            75
+    125 Hz         flat        up  louder
+    ...                        down quieter
+```
+
+The EQ itself is not part of this extension. It sits below Mopidy in ALSA, so
+Mopidy plays into it and neither knows nor cares that it is there — which is
+what keeps this free of Mopidy internals, since there is no API to its running
+pipeline. See paperpod's README for setting one up with
+`libasound2-plugin-equal`.
+
+Two things worth knowing:
+
+**Flat is 66, not 50.** alsaequal's scale is asymmetric, with more cut
+available than boost, so the neutral point is not the middle. Rows at 66 read
+`flat` rather than showing a number that would mean nothing.
+
+**It is a ten-band EQ, and ten bands cost CPU.** Measured on a Pi Zero 2 W,
+ten bands add about 4.8% of a core while playing against 1.1% for three. That
+is nothing at idle, but it is carried for as long as the music runs — worth
+knowing on a battery build.
 
 ## Input API
 

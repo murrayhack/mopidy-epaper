@@ -13,7 +13,7 @@ import logging
 import threading
 import time
 
-from . import layout, menu
+from . import equalizer, layout, menu
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +45,7 @@ ROOT_TITLE = "Menu"
 LIBRARY_TITLE = "Library"
 PLAYLISTS_TITLE = "Playlists"
 QUEUE_TITLE = "Queue"
+EQUALIZER_TITLE = "Equalizer"
 
 #: Repeat cycles through these in order.
 REPEAT_STATES = ("off", "all", "one")
@@ -60,13 +61,29 @@ class Entry:
     ``value`` for settings rows and ``action`` for what selecting it does.
     """
 
-    def __init__(self, name, type, action, value=None, uri=None, tlid=None):
+    def __init__(self, name, type, action, value=None, uri=None, tlid=None, level=None):
         self.name = name
         self.type = type
         self.action = action
+        # Drawn as text, so always a string. `level` carries the number an
+        # equalizer row needs, rather than parsing it back out of the label.
         self.value = value
         self.uri = uri
         self.tlid = tlid
+        self.level = level
+
+
+def _band_entry(control, level):
+    """One equalizer row.
+
+    ``control`` is alsaequal's name, `00. 31 Hz`, which amixer needs and which
+    is not worth showing; the numeric prefix only exists to order them. "flat"
+    rather than 66 because the scale is asymmetric and the neutral point is not
+    where anyone would guess.
+    """
+    label = control.split(". ", 1)[-1]
+    shown = "flat" if level == equalizer.FLAT else str(level)
+    return Entry(label, "setting", control, value=shown, level=level)
 
 
 def content_key(track):
@@ -102,7 +119,7 @@ def status_key(playback):
 
 
 class Ui:
-    def __init__(self, config, display, player=None, on_dirty=None):
+    def __init__(self, config, display, player=None, on_dirty=None, equalizer=None):
         """``player`` supplies everything that needs Mopidy.
 
         It is injected rather than imported so this whole state machine stays
@@ -124,6 +141,9 @@ class Ui:
         self._idle_screen = config["idle_screen"]
         self._menu_timeout = config.get("menu_timeout", 20)
         self._player = player
+        # Optional, like the battery: most builds have no equalizer and the
+        # menu simply does not offer one.
+        self._equalizer = equalizer
 
         self._lock = threading.RLock()
         self._locked = False
@@ -322,13 +342,19 @@ class Ui:
     def _root_items(self):
         options = self._options()
         repeat = str(options.get("repeat", "off")).capitalize()
-        return [
+        items = [
             Entry(LIBRARY_TITLE, "directory", "library"),
             Entry(PLAYLISTS_TITLE, "directory", "playlists"),
             Entry(QUEUE_TITLE, "directory", "queue"),
             Entry("Shuffle", "toggle", "shuffle", value="On" if options.get("shuffle") else "Off"),
             Entry("Repeat", "toggle", "repeat", value=repeat),
         ]
+        # `enabled` rather than reading the bands: that shells out to amixer,
+        # and the root menu is drawn far more often than the equalizer is
+        # opened.
+        if self._equalizer is not None and self._equalizer.enabled:
+            items.append(Entry(EQUALIZER_TITLE, "directory", "equalizer"))
+        return items
 
     def _is_playing(self):
         if self._last_playback is None:
@@ -366,6 +392,29 @@ class Ui:
         self._set_option("repeat", REPEAT_STATES[(index + 1) % len(REPEAT_STATES)])
 
     # -- library and queue ------------------------------------------------
+
+    def _open_equalizer(self):
+        self._push(
+            "equalizer",
+            EQUALIZER_TITLE,
+            [_band_entry(name, level) for name, level in self._equalizer.bands()],
+        )
+
+    def _open_band(self, item):
+        """One band on its own, where up and down mean louder and quieter."""
+        self._push("eq_band", item.name, [_band_entry(item.action, item.level)])
+
+    def _adjust_band(self, frame, delta):
+        """``delta`` is a cursor movement, so up the list is -1.
+
+        Inverted here because on a band, up has to mean louder. Without this
+        the button turns the band down, which is the sort of wrong that feels
+        like broken hardware rather than a bug.
+        """
+        entry = frame["items"][0]
+        level = self._equalizer.set_band(entry.action, entry.level - delta * equalizer.STEP)
+        frame["items"] = [_band_entry(entry.action, level)]
+        self._draw_menu()
 
     def _open_library(self, uri, title):
         self._push("library", title, self._browse_items(uri), uri=uri)
@@ -477,6 +526,9 @@ class Ui:
 
     def _move(self, delta):
         frame = self._stack[-1]
+        if frame["kind"] == "eq_band":
+            self._adjust_band(frame, delta)
+            return
         count = len(frame["items"])
         if not count:
             return
@@ -498,10 +550,18 @@ class Ui:
             self._open_playlist(item.uri, item.name)
         elif frame["kind"] == "queue":
             self._select_queued(item)
+        elif frame["kind"] == "equalizer":
+            self._open_band(item)
+        elif frame["kind"] == "eq_band":
+            # Nothing to select: up and down adjust, back leaves.
+            return
         else:
             self._select_library(item, items)
 
     def _select_root(self, item):
+        if item.action == "equalizer":
+            self._open_equalizer()
+            return
         if item.action == "library":
             self._open_library(None, LIBRARY_TITLE)
         elif item.action == "playlists":

@@ -14,6 +14,7 @@ from mopidy import core
 
 from .display import EpaperDisplay
 from .battery import Battery
+from .equalizer import Equalizer
 from . import timing
 from .playback import Playback
 from .ui import Ui
@@ -145,7 +146,11 @@ class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
             self.core, battery=Battery(self.config["battery_socket"])
         )
         self.ui = Ui(
-            self.config, self.display, player=self.player, on_dirty=self._render_wanted.set
+            self.config,
+            self.display,
+            player=self.player,
+            on_dirty=self._render_wanted.set,
+            equalizer=Equalizer(self.config["equalizer_device"]),
         )
         self._refresh()
         self._ticker = threading.Thread(

@@ -137,13 +137,43 @@ class FakePlayer:
         self._options[name] = value
 
 
-def make_ui(display, sleep_after=300, idle_screen="keep", menu_timeout=20, player=None):
+def make_ui(
+    display,
+    sleep_after=300,
+    idle_screen="keep",
+    menu_timeout=20,
+    player=None,
+    equalizer=None,
+):
     config = {
         "sleep_after": sleep_after,
         "idle_screen": idle_screen,
         "menu_timeout": menu_timeout,
     }
-    return ui.Ui(config, display, player=FakePlayer() if player is None else player)
+    return ui.Ui(
+        config,
+        display,
+        player=FakePlayer() if player is None else player,
+        equalizer=equalizer,
+    )
+
+
+class FakeEqualizer:
+    """Ten bands in memory, recording what was applied."""
+
+    def __init__(self, enabled=True, bands=None):
+        self.enabled = enabled
+        self._bands = dict(bands or {"00. 31 Hz": 66, "01. 63 Hz": 66, "09. 16 kHz": 66})
+        self.applied = []
+
+    def bands(self):
+        return list(self._bands.items())
+
+    def set_band(self, name, level):
+        level = max(0, min(100, int(level)))
+        self._bands[name] = level
+        self.applied.append((name, level))
+        return level
 
 
 def open_library(screen):
@@ -1099,3 +1129,112 @@ def test_status_key_covers_the_charger():
     assert ui.status_key(Playback(**common, plugged=True)) != ui.status_key(
         Playback(**common, plugged=False)
     )
+
+
+def open_equalizer(screen):
+    """home, then select the Equalizer row, which is last."""
+    screen.handle_action("home")
+    screen._stack[-1]["selected"] = len(screen._stack[-1]["items"]) - 1
+    screen.handle_action("select")
+
+
+def test_no_equalizer_row_without_one_configured():
+    """Most builds have none, and a dead row is worse than no row."""
+    screen = make_ui(FakeDisplay())
+
+    screen.handle_action("home")
+
+    assert "Equalizer" not in [item.name for item in screen._stack[-1]["items"]]
+
+
+def test_no_equalizer_row_when_the_device_is_unreachable():
+    screen = make_ui(FakeDisplay(), equalizer=FakeEqualizer(enabled=False))
+
+    screen.handle_action("home")
+
+    assert "Equalizer" not in [item.name for item in screen._stack[-1]["items"]]
+
+
+def test_the_equalizer_lists_its_bands():
+    screen = make_ui(FakeDisplay(), equalizer=FakeEqualizer())
+
+    open_equalizer(screen)
+
+    frame = screen._stack[-1]
+    assert frame["kind"] == "equalizer"
+    # The numeric prefix orders the controls and is not worth showing.
+    assert [item.name for item in frame["items"]] == ["31 Hz", "63 Hz", "16 kHz"]
+
+
+def test_a_band_at_the_neutral_point_reads_as_flat():
+    """66 would mean nothing to anyone; the scale is asymmetric."""
+    screen = make_ui(FakeDisplay(), equalizer=FakeEqualizer())
+
+    open_equalizer(screen)
+
+    assert screen._stack[-1]["items"][0].value == "flat"
+
+
+def test_up_and_down_adjust_the_band_rather_than_the_cursor():
+    eq = FakeEqualizer()
+    screen = make_ui(FakeDisplay(), equalizer=eq)
+    open_equalizer(screen)
+    screen.handle_action("select")  # into the first band
+
+    screen.handle_action("up")
+    screen.handle_action("up")
+    screen.handle_action("down")
+
+    assert eq.applied == [
+        ("00. 31 Hz", 66 + ui.equalizer.STEP),
+        ("00. 31 Hz", 66 + 2 * ui.equalizer.STEP),
+        ("00. 31 Hz", 66 + ui.equalizer.STEP),
+    ]
+
+
+def test_the_adjusted_level_shows_on_the_row():
+    screen = make_ui(FakeDisplay(), equalizer=FakeEqualizer())
+    open_equalizer(screen)
+    screen.handle_action("select")
+
+    screen.handle_action("up")
+
+    assert screen._stack[-1]["items"][0].value == str(66 + ui.equalizer.STEP)
+
+
+def test_a_band_clamps_rather_than_walking_off_the_end():
+    """Holding up must stop at the top, not keep sending amixer nonsense."""
+    eq = FakeEqualizer(bands={"00. 31 Hz": 95})
+    screen = make_ui(FakeDisplay(), equalizer=eq)
+    open_equalizer(screen)
+    screen.handle_action("select")
+
+    for _ in range(5):
+        screen.handle_action("up")
+
+    assert eq.applied[-1] == ("00. 31 Hz", 100)
+    assert screen._stack[-1]["items"][0].value == "100"
+
+
+def test_back_leaves_the_band_and_returns_to_the_list():
+    screen = make_ui(FakeDisplay(), equalizer=FakeEqualizer())
+    open_equalizer(screen)
+    screen.handle_action("select")
+    assert screen._stack[-1]["kind"] == "eq_band"
+
+    screen.handle_action("back")
+
+    assert screen._stack[-1]["kind"] == "equalizer"
+
+
+def test_select_inside_a_band_does_nothing():
+    """There is nothing to select: up and down adjust, back leaves."""
+    eq = FakeEqualizer()
+    screen = make_ui(FakeDisplay(), equalizer=eq)
+    open_equalizer(screen)
+    screen.handle_action("select")
+
+    screen.handle_action("select")
+
+    assert screen._stack[-1]["kind"] == "eq_band"
+    assert eq.applied == []

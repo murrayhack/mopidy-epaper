@@ -32,6 +32,9 @@ class Extension(ext.Extension):
         # A PiSugar power manager's Unix socket. Unset means no battery
         # indicator, which is the right default: most builds are on mains.
         schema["battery_socket"] = config.String(optional=True)
+        # An ALSA mixer device carrying equalizer bands, e.g. `equal` from
+        # libasound2-plugin-equal. Unset means no equalizer in the menu.
+        schema["equalizer_device"] = config.String(optional=True)
         schema["dummy_output_path"] = config.Path(optional=True)
         return schema
 

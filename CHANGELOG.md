@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- An **Equalizer** entry in the menu, behind the new `equalizer_device`
+  option: an ALSA mixer device carrying bands, e.g. `equal` from
+  `libasound2-plugin-equal`. Selecting a band opens it on its own, where up
+  and down change the level and back returns. Changes apply live. Driven with
+  `amixer` rather than a binding, so the dependency list does not grow, and
+  it works against anything exposing ALSA mixer controls. Rows at alsaequal's
+  neutral 66 read `flat`, since the scale is asymmetric and the midpoint is
+  not neutral.
+
 ## v1.2.0 — 2026-09-11
 
 - Battery charge on the status strip, from a PiSugar power manager, behind
