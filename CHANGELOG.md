@@ -13,7 +13,10 @@
   Select confirms and returns, since there is nothing to pick and an inert
   button reads as broken. A Reset all row returns every band to
   flat; it is last rather than first, so it is not one press from opening
-  the menu.
+  the menu. Mopidy warns at startup when
+  `equalizer_device` is set but the audio output does not appear to route
+  through it, which would otherwise give a menu whose bands adjust nothing
+  audible.
 
 ## v1.2.0 — 2026-09-11
 

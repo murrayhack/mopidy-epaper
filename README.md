@@ -251,11 +251,20 @@ what keeps this free of Mopidy internals, since there is no API to its running
 pipeline. See paperpod's README for setting one up with
 `libasound2-plugin-equal`.
 
-Three things worth knowing:
+Four things worth knowing:
 
 **Reset all** is the last row, not the first: the cursor opens on row one, and
 a reset one press from opening the menu is a reset waiting to happen. The list
 wraps, so up-from-the-top still reaches it in a single press.
+
+**`equalizer_device` and `[audio] output` are separate settings, and nothing
+makes them agree.** The menu row follows the first alone: configure an
+equalizer but route playback somewhere else and the bands will list, adjust,
+and change nothing you can hear. Mopidy logs a warning at startup when the
+output does not appear to mention the device — a warning rather than hiding
+the row, because matching a pipeline description by string cannot see an ALSA
+alias, and silently removing a working equalizer would be worse. To turn the
+equalizer off, blank **both**.
 
 **Flat is 66, not 50.** alsaequal's scale is asymmetric, with more cut
 available than boost, so the neutral point is not the middle. Rows at 66 read

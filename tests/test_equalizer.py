@@ -9,7 +9,7 @@ import subprocess
 import pytest
 
 from mopidy_epaper import equalizer
-from mopidy_epaper.equalizer import Equalizer, parse_bands
+from mopidy_epaper.equalizer import Equalizer, in_output_path, parse_bands
 
 # Captured from `amixer -D equal scontents` on the target hardware.
 REAL_OUTPUT = """Simple mixer control '00. 31 Hz',0
@@ -157,3 +157,28 @@ def test_reset_flattens_every_band(run):
 def test_reset_with_no_device_does_nothing(run):
     assert Equalizer("").reset() == 0
     assert run.calls == []
+
+
+@pytest.mark.parametrize(
+    "output,routed",
+    [
+        ("alsasink device=equal", True),
+        ("volume volume=0.25 ! alsasink device=equal", True),
+        ('alsasink device="equal"', True),
+        ("alsasink device=plug:equal", True),
+        # The plain sink: an equalizer is configured but nothing goes through it.
+        ("alsasink device=sysdefault:CARD=sndrpihifiberry", False),
+        # A GStreamer element, not an ALSA device. The word boundary is what
+        # keeps this from counting as routing.
+        ("audioconvert ! equalizer-10bands band0=4.0 ! alsasink", False),
+        ("", False),
+    ],
+)
+def test_whether_the_device_is_in_the_output_path(output, routed):
+    assert in_output_path("equal", output) is routed
+
+
+def test_no_device_is_never_routed():
+    """Nothing configured, nothing to check -- the caller skips the warning."""
+    assert in_output_path("", "alsasink device=equal") is False
+    assert in_output_path(None, "alsasink device=equal") is False

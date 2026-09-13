@@ -106,3 +106,20 @@ def parse_bands(output):
             bands.append((name, int(level.group(1))))
             name = None
     return bands
+
+
+def in_output_path(device, output):
+    """Does ``output`` appear to route playback through ``device``?
+
+    A word match against a GStreamer pipeline description, which is a guess
+    rather than a fact: an ALSA alias, or the device reached indirectly, will
+    not be seen. So callers warn rather than acting on it — silently hiding a
+    working equalizer would be worse than a stray warning about one that is
+    fine.
+
+    The word boundary matters. `equalizer-10bands` is a GStreamer element,
+    not an ALSA device called `equal`, and must not count as routing.
+    """
+    if not device or not output:
+        return False
+    return re.search(rf"\b{re.escape(device)}\b", output) is not None

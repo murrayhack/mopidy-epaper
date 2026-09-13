@@ -14,6 +14,7 @@ from mopidy import core
 
 from .display import EpaperDisplay
 from .battery import Battery
+from . import equalizer as equalizer_module
 from .equalizer import Equalizer
 from . import timing
 from .playback import Playback
@@ -118,11 +119,32 @@ class MopidyPlayer:
             self._core.tracklist.set_single(value == "one").get()
 
 
+def _warn_if_equalizer_is_not_routed(device, output):
+    """A menu that adjusts nothing is worse than no menu.
+
+    The equalizer row follows `equalizer_device` alone, and knows nothing
+    about where audio actually goes. Configure one without routing playback
+    through it and the bands list, adjust, and do nothing audible.
+    """
+    if not device or equalizer_module.in_output_path(device, output):
+        return
+    logger.warning(
+        "equalizer_device is %r, but Mopidy's audio output does not mention "
+        "it: %r. The menu will offer bands that change nothing you can hear. "
+        "Route playback through the device, or unset equalizer_device.",
+        device,
+        output,
+    )
+
+
 class EpaperFrontend(pykka.ThreadingActor, core.CoreListener):
     def __init__(self, config, core):
         super().__init__()
         self.config = config["epaper"]
         self._plugged = False
+        _warn_if_equalizer_is_not_routed(
+            self.config["equalizer_device"], config.get("audio", {}).get("output")
+        )
         self.core = core
         self.display = None
         self.ui = None
