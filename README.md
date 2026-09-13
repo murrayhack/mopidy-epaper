@@ -240,8 +240,9 @@ immediately — nothing is restarted.
   ------------------           ------
   > 31 Hz          flat        > 31 Hz        75
     63 Hz            75
-    125 Hz         flat        up  louder
-    ...                        down quieter
+    125 Hz         flat        up      louder
+    ...                        down    quieter
+    Reset all                  select  done
 ```
 
 The EQ itself is not part of this extension. It sits below Mopidy in ALSA, so
@@ -250,7 +251,11 @@ what keeps this free of Mopidy internals, since there is no API to its running
 pipeline. See paperpod's README for setting one up with
 `libasound2-plugin-equal`.
 
-Two things worth knowing:
+Three things worth knowing:
+
+**Reset all** is the last row, not the first: the cursor opens on row one, and
+a reset one press from opening the menu is a reset waiting to happen. The list
+wraps, so up-from-the-top still reaches it in a single press.
 
 **Flat is 66, not 50.** alsaequal's scale is asymmetric, with more cut
 available than boost, so the neutral point is not the middle. Rows at 66 read

@@ -11,7 +11,9 @@
   neutral 66 read `flat`, since the scale is asymmetric and the midpoint is
   not neutral.
   Select confirms and returns, since there is nothing to pick and an inert
-  button reads as broken.
+  button reads as broken. A Reset all row returns every band to
+  flat; it is last rather than first, so it is not one press from opening
+  the menu.
 
 ## v1.2.0 — 2026-09-11
 
