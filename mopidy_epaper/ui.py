@@ -393,12 +393,11 @@ class Ui:
 
     # -- library and queue ------------------------------------------------
 
+    def _band_entries(self):
+        return [_band_entry(name, level) for name, level in self._equalizer.bands()]
+
     def _open_equalizer(self):
-        self._push(
-            "equalizer",
-            EQUALIZER_TITLE,
-            [_band_entry(name, level) for name, level in self._equalizer.bands()],
-        )
+        self._push("equalizer", EQUALIZER_TITLE, self._band_entries())
 
     def _open_band(self, item):
         """One band on its own, where up and down mean louder and quieter."""
@@ -520,6 +519,10 @@ class Ui:
             frame["items"] = self._playlist_items()
         elif frame["kind"] == "queue":
             frame["items"] = self._queue_items()
+        elif frame["kind"] == "equalizer":
+            # Not cosmetic: a stale level here is carried back into the band
+            # and the next adjustment applies it, undoing what was just set.
+            frame["items"] = self._band_entries()
         count = len(frame["items"])
         frame["selected"] = min(frame["selected"], max(0, count - 1))
         frame["offset"] = menu.scroll_offset(count, frame["selected"], frame["offset"])
@@ -553,8 +556,9 @@ class Ui:
         elif frame["kind"] == "equalizer":
             self._open_band(item)
         elif frame["kind"] == "eq_band":
-            # Nothing to select: up and down adjust, back leaves.
-            return
+            # There is nothing to pick, so select means done. Doing nothing
+            # reads as an unresponsive button.
+            self._back()
         else:
             self._select_library(item, items)
 

@@ -232,8 +232,8 @@ API below.
 
 With `equalizer_device` set, the menu gains an **Equalizer** entry listing the
 device's bands. Selecting one opens it on its own, where **up and down change
-the level** and **back** returns to the list. Changes apply immediately —
-nothing is restarted.
+the level**, and **select or back** returns to the list. Changes apply
+immediately — nothing is restarted.
 
 ```
   Equalizer                    31 Hz

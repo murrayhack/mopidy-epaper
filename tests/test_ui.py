@@ -1227,8 +1227,11 @@ def test_back_leaves_the_band_and_returns_to_the_list():
     assert screen._stack[-1]["kind"] == "equalizer"
 
 
-def test_select_inside_a_band_does_nothing():
-    """There is nothing to select: up and down adjust, back leaves."""
+def test_select_inside_a_band_confirms_and_returns():
+    """There is nothing to pick, so select means done.
+
+    Doing nothing reads as an unresponsive button.
+    """
     eq = FakeEqualizer()
     screen = make_ui(FakeDisplay(), equalizer=eq)
     open_equalizer(screen)
@@ -1236,5 +1239,49 @@ def test_select_inside_a_band_does_nothing():
 
     screen.handle_action("select")
 
-    assert screen._stack[-1]["kind"] == "eq_band"
+    assert screen._stack[-1]["kind"] == "equalizer"
     assert eq.applied == []
+
+
+def test_the_list_shows_the_level_set_inside_a_band():
+    screen = make_ui(FakeDisplay(), equalizer=FakeEqualizer())
+    open_equalizer(screen)
+    screen.handle_action("select")
+    screen.handle_action("up")
+
+    screen.handle_action("back")
+
+    assert screen._stack[-1]["items"][0].value == str(66 + ui.equalizer.STEP)
+
+
+def test_re_entering_a_band_continues_from_where_it_was_left():
+    """The bug this guards is not a stale label.
+
+    A stale level is carried back into the band, so the next adjustment
+    applies it and undoes what was just set -- the band appears to snap back
+    to its old value.
+    """
+    eq = FakeEqualizer()
+    screen = make_ui(FakeDisplay(), equalizer=eq)
+    open_equalizer(screen)
+    screen.handle_action("select")
+    screen.handle_action("up")
+    screen.handle_action("back")
+
+    screen.handle_action("select")
+    screen.handle_action("up")
+
+    assert eq.applied[-1] == ("00. 31 Hz", 66 + 2 * ui.equalizer.STEP)
+
+
+def test_a_band_changed_elsewhere_shows_on_return():
+    """amixer is not the only thing that can move these."""
+    eq = FakeEqualizer()
+    screen = make_ui(FakeDisplay(), equalizer=eq)
+    open_equalizer(screen)
+    screen.handle_action("select")
+
+    eq.set_band("00. 31 Hz", 20)
+    screen.handle_action("back")
+
+    assert screen._stack[-1]["items"][0].value == "20"

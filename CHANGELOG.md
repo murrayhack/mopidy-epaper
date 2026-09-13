@@ -10,6 +10,8 @@
   it works against anything exposing ALSA mixer controls. Rows at alsaequal's
   neutral 66 read `flat`, since the scale is asymmetric and the midpoint is
   not neutral.
+  Select confirms and returns, since there is nothing to pick and an inert
+  button reads as broken.
 
 ## v1.2.0 — 2026-09-11
 
